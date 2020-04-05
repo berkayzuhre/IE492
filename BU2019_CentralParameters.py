@@ -14,15 +14,16 @@ from datetime import datetime
 from datetime import timedelta
 import calendar
 import os
-
 #######################################################################################
 # Static Parameter Definitions
 #######################################################################################
 
-os.chdir('C:/Users/Grundig/Desktop/492/IE 492 Final Project/')
+
+os.chdir('C:/Users/Grundig/Desktop/492/')
 
 f = open('pass.txt', 'r')
 pass_=f.readline()
+
 
 # primary database
 PrimaryDB = {
@@ -59,6 +60,29 @@ ConnInfoInd = {
 	'station_order':		16,
 	}
 
+# elements of a SegmentInfo value list
+# SegmentInfo[1] = ValueList of the first tour segment
+# Note: line_IntvEnd = stat_IntvStart
+SegmentInfoInd = {
+	'first_station': 	0,
+	'last_station'	: 	1,
+	'trip_id':			2,
+	'line_id':			3,
+	'line_IntvStart':	4, 	# Departure from first station of line, in total minutes (500 for 8:20)
+	'line_IntvEnd':		5,
+	'stat_IntvStart':	6, 	# Arrival to first_station, in total minutes (for station measurements)
+	'stat_IntvEnd'  :	7,	# Departure from first_station
+	'verwaltung': 		8, 
+	'gattung': 			9, 
+	'linie': 			10,
+	'fahrtnum':			11,
+
+	# extended route segment
+	'TimeWindow':		12,			# time window (Zeitfenster) of segment, determined by the departure time from the first station of segment
+	'FirstConnectionInd':	13,		# index of the first connection of the segment (Connection = Route[ind])
+	'FinalArrivalTimeOfLine':	14,	# arrival time of the line to the final station of the whole trip
+}
+
 # revenues & costs
 RevenuePerLineMeasurement = 150.0
 HourlyTravelCost = 60.0 			# 60 CHF per 60 minutes
@@ -83,6 +107,8 @@ WD = {
 	13: (7,),
 }
 
+WeekdayGroups = WD 
+
 # Zeitfenster (time windows)
 ZF = {
 	0: (0, 23*60 + 59),
@@ -92,6 +118,8 @@ ZF = {
 	4: (16*60, 20*60 + 59),
 	5: (21*60, 23*60 + 59)
 }
+
+TimeWindows = ZF
 
 #######################################################################################
 # Helper Functions
@@ -109,6 +137,7 @@ def GetFirstAndLastDaysOfMonth_(year, month):
     """
 	DayRange = calendar.monthrange(year,month)
 	MonthEndDay = DayRange[1]
+
 	StartDate = date(year,month,1)
 	EndDate = date(year,month,MonthEndDay)		
 	return (StartDate, EndDate)
@@ -160,3 +189,26 @@ TrWay['YM'] = 'ZF+M'	# Zu Fuss + Metro
 TrWay['YB'] = 'ZF+B'	# Zu Fuss + Bus
 TrWay['YT'] = 'ZF+T'	# Zu Fuss + Tram
 
+# directory for saved variables
+VariableDirectory = 'SavedVariables'
+
+# required minimum time for a line measurement, in minutes
+ReqLineMeasureTime = 5
+
+# revenue & cost
+RevenueLineMeasure = 40.0
+CostLineMeasure = 0 
+HourlyTripCost = 30.0 
+
+TripCostPerTimeInterval = {				# trip cost per minute
+	(0,	5*60):			38/60.0,
+	(5*60, 22*60): 		30/60.0,
+	(22*60, 24*60):		38/60.0,
+}
+
+# default change times at a station
+DEFAULT_LINE_CHANGE_TIME = 3 
+DEFAULT_STATION_CHANGE_TIME = 5
+
+# measurement rules
+MinTimeIntvForStationMeasurements = 3 * 60 	# minimum time interval between the subsequent measurements of the same station

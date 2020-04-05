@@ -19,7 +19,6 @@ from datetime import datetime
 from datetime import timedelta
 import calendar
 import itertools as it
-from collections import Counter
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
@@ -129,23 +128,6 @@ class Cond:
 		Parameters: GattungList
 		Example: Cond.IncludeListedGattungsOnly: (['S','R','BUS'],)
 		"""
-
-	
-	DistinctCategoryLimit = 9
-	DistinctCategoryLimit_explain = """
-		Maximum number of distinct line categories present in final path
-		Parameters: Maximum number of distinct line categories
-		Example: Cond.DistinctCategoryLimit(2,)
-	""" 
-
-	CategoryChangeLimit = 10
-	CategoryChangeLimit_explain = """
-		Maximum number of line category changes in final path
-		Parameters: Maximum number of line category changes
-		Example: Cond.CategoryChangeLimit(3,)
-	""" 
-
-
 
 	VisitStations = 11 
 	VisitStations_explain = """
@@ -554,28 +536,6 @@ class Cond:
 					IncrementDicValue(cls.TerminationReasonsDic, 'VisitStations')
 					if IfTest: print "--------- VisitStations violated ---------"
 					return False
-
-
-		#DistinctCategoryLimit
-		if RouteConditions.has_key(cls.DistinctCategoryLimit):
-			cond=cls.DistinctCategoryLimit
-			parameters = RouteConditions[cond]
-			CategoryLimit = parameters[0]
-			if not CheckDistinctCategoryLimit(ConnectionInfo, PathInfo, CategoryLimit):
-				IncrementDicValue(cls.TerminationReasonsDic, 'DistinctCategoryLimit')
-				if IfTest: print "--------- DistinctCategoryLimit violated ---------"
-				return False		
-
-		#CategoryChangeLimit
-		if RouteConditions.has_key(cls.CategoryChangeLimit):
-			cond=cls.CategoryChangeLimit
-			parameters = RouteConditions[cond]
-			ChangeLimit = parameters[0]
-			if not CheckCategoryChangeLimit(ConnectionInfo, PathInfo, ChangeLimit):
-				IncrementDicValue(cls.TerminationReasonsDic, 'CategoryChangeLimit')
-				if IfTest: print "--------- CategoryChangeLimit violated ---------"
-				return False				
-
 
 		# NoLineChangeAtVirtualStations like 138 (tunnel station)
 		# don't permit line changes at virtual stations like 138
@@ -1087,7 +1047,7 @@ def GetDurationOfTripSinceDeparture(PathInfo):
 	return TotalDuration
 
 # GetDurationOfTour
-GetDurationOfTour = GetDurationOfTripSinceDeparture
+GetDurationOfTour = GetDurationOfTripSinceDeparture 
 
 def GetDepartureTimeOfTour(PathInfo):
 	"""
@@ -1109,7 +1069,7 @@ def GetArrivalTimeOfTour(PathInfo):
 	if len(PathInfo) < 2: return None  
 
 	ArrivalTime = PathInfo[-1][ConnInfoInd['arrival_hour']]*60 + PathInfo[-1][ConnInfoInd['arrival_min']]
-	return DepartureTime 
+	return ArrivalTime 
 
 def GetTimeAndDurationOfTripSinceDeparture(PathInfo):
 	"""
@@ -2390,6 +2350,28 @@ def GetLineMeasurementCoverageOfRoute(RouteInfo, ReqLineMeasureTime, FirstDayOfP
 
 GetLMCoverageOfRoute = GetLineMeasurementCoverageOfRoute 	# alias name
 
+# new function: 8. March 2020 by Tunc
+def GetLMCoverageOfRouteForGivenDay(RouteInfo, DayOrd, ReqLineMeasureTime, FirstDayOfPeriod, LastDayOfPeriod, LMRequirements=None, ExcludeTW0=True, ExcludeWG10=True):
+	"""
+	Get concrete Line Measurement (LM) Coverage of a route for a given DayOrd like date(2018, 4, 10).toordinal()
+	"""
+	(LMCoverageOfRoutePerSegment, PotentialLMCoverage) = GetLMCoverageOfRoute(RouteInfo, ReqLineMeasureTime, FirstDayOfPeriod, 
+		LastDayOfPeriod, LMRequirements, ExcludeTW0, ExcludeWG10)
+	ConcreteLMCoverage = {}
+
+	if not PotentialLMCoverage:
+		return ConcreteLMCoverage
+
+	# get WeekdayGroup of day
+	WeekdayGroups = GetWeekdayGroupsOfDate(WD, DayOrd)
+	wg = WeekdayGroups[0]
+
+	for (LineID, TWindow, WGroup) in PotentialLMCoverage:
+		if WGroup == wg:
+			ConcreteLMCoverage[(LineID, TWindow, WGroup)] = 1
+
+	return ConcreteLMCoverage
+
 # updated: 11.05.2017 (error corrected)
 def GetLMCoverageOfMultipleRoutes(RouteInfoList, ReqLineMeasureTime, FirstDayOfPeriod, LastDayOfPeriod, LMRequirements=None):
 	"""
@@ -2595,6 +2577,115 @@ def GetExactTrailOfRoute(RouteInfo):
 		IntervalEndTimes.append(arrival_time)
 
 	return (StationList, IntervalBeginTimes, IntervalEndTimes)
+
+# Route Value (see also GetRouteValue in AssignmentFunctions)
+
+def GetSimpleValueOfRoute(PathInfo, MeasurementTime=10, MeasurementValue=100, HourlyCost=40):
+	"""
+	Calculate monetary value of a route (assuming all measurements are required) considering:
+	MeasurementTime: Minimum time in minutes required for a measurement on a line
+	MeasurementValue: Monatary value of a single measurement
+	HourlyCost: Hourly cost of a trip
+	Note: A line can be measured at most once in a journey.
+	"""
+	MeasuredLine = []
+	if PathInfo == None: return 0
+	if len(PathInfo) < 2: return 0
+
+	TimeIntervals = GetTimeIntervalsForEachLine(PathInfo)
+	MeasurementCount = 0
+
+	# find all possible measurements
+	for Line in TimeIntervals.keys():
+		if not Line in MeasuredLine:
+			intervals = TimeIntervals[Line]
+			for interval in intervals:
+				DepartureTime = interval[0]
+				ArrivalTime = interval[1] 
+				if  (ArrivalTime - DepartureTime) >= MeasurementTime:
+					MeasurementCount +=1
+					MeasuredLine.append(Line)
+					break 
+	# total trip time in minutes
+	TripStartTime = PathInfo[1][ConnInfoInd['abfahrt_std']]*60 + PathInfo[1][ConnInfoInd['abfahrt_min']]
+	TripEndTime = PathInfo[-1][ConnInfoInd['ankunft_std']]*60 + PathInfo[-1][ConnInfoInd['ankunft_min']]
+	TotalTripDuration = TripEndTime - TripStartTime
+
+	# trip value
+	TripValue = MeasurementValue * MeasurementCount - (TotalTripDuration / 60.0 * HourlyCost)
+	return TripValue
+
+def GetSimpleValueOfRoute(PathInfo, TimeWindows, WeekDayGroup, ReqLineMeasureTime, ReqStationMeasureTime, \
+	StartDate, EndDate, HourlyTripCost, IncomeLineMeasure, IncomeStationMeasure, \
+	LineMeasurementReq, LineToBundle):
+	"""
+	Evaluate the value of route with respect to its measurable lines and stations within the 
+	given time range.
+
+	Assumption to simplify: A line or station can be measured only once within a route.
+
+	TimeIntervalsOfMeasurableStations[station] = [(Line1, IntvStartMin1, IntvEndMin1), (Line2, IntvStartMin2, IntvEndMin2), ...]
+	"""
+	MeasurableLines = GetMeasurableLines(PathInfo, TimeWindows, WeekDayGroup, ReqLineMeasureTime, StartDate, EndDate)
+	# MeasurableStations = GetMeasurableStations(PathInfo, TimeWindows, WeekDayGroup, ReqStationMeasureTime, StartDate, EndDate)
+	TimeIntervalsOfMeasurableStations = GetTimeIntervalsOfMeasurableStations2(PathInfo, ReqStationMeasureTime)
+
+	# get duration of route
+	TotalDuration = GetTotalDurationOfPath(PathInfo)
+
+	# how many lines can be measured
+	LineRegister = []	# to ensure that a line is measured only once
+	LineMeasureCount = 0
+
+	for key in LineMeasurementReq:
+		line = key[0]
+		if MeasurableLines.has_key(key) and line not in LineRegister:
+			LineMeasureCount += 1
+			LineRegister.append(line)
+
+	# how many stations can be measured
+	StationRegister = []	# to ensure that a station is measured only once
+	StationMeasureCount = 0
+
+	for station in TimeIntervalsOfMeasurableStations:
+		if station in StationRegister:
+			continue
+		intervals = TimeIntervalsOfMeasurableStations[station]
+		for interval in intervals:
+			(line,smin,emin) = interval 
+			if LineToBundle.has_key(line):
+				StationMeasureCount += 1 
+				StationRegister.append(station)
+				break
+
+	RouteValue = LineMeasureCount*IncomeLineMeasure + StationMeasureCount*IncomeStationMeasure \
+		- (TotalDuration / 60.0) * HourlyTripCost
+	return RouteValue
+
+def SortRoutesAfterValueInDescOrder(RouteInfoList, RouteValueFunc, Parameters):
+	"""
+	Sort routes after their values, in descending order.
+	Return a sorted route list.
+
+	RouteValueFunc: Name of function, that evaluates the value of a route.
+	Parameters: n-Tuple with parameters for RouteValueFunc.
+		(param1, param2, param3, ...)
+	"""
+	RouteInd = range(0, len(RouteInfoList))
+	RouteValues = []
+
+	for i in RouteInd:
+		RouteInfo = RouteInfoList[i]
+		RouteValue = RouteValueFunc(RouteInfo, *Parameters)
+		RouteValues.append(RouteValue)
+
+	SortedInd = SortIndex(RouteValues, RouteInd)
+	SortedInd.reverse()	
+	
+	SortedRouteInfoList = []
+	for i in SortedInd:
+		SortedRouteInfoList.append(RouteInfoList[i])
+	return SortedRouteInfoList
 
 
 # **************************************************************************************
@@ -3033,45 +3124,6 @@ CondStrOneOfSelectedTripDays = CondStrOneOfSelectedTripDays_hex
 # Condition to be applied on ConnectionInfo functions for selecting connections
 # **************************************************************************************
 
-def CheckDistinctCategoryLimit(ConnectionInfo, PathInfo, CategoryLimit):
-	"""
-	Check if the number of distinct categories exceed the given limit
-	"""
-	if CategoryLimit == None: return True
-
-	category_list =zip(*PathInfo)[ConnInfoInd['line_category']]
-	category_list=category_list + (ConnectionInfo[ConnInfoInd['line_category']],)
-	distinct_list = (Counter(category_list))
-	distinct_size = len(distinct_list)
-
-	if distinct_size > (CategoryLimit+1):
-		return False
-	else:
-		 return True
-
-def CheckCategoryChangeLimit(ConnectionInfo, PathInfo, ChangeLimit):
-	"""
-	Check if the total number of line category changes exceed the given limit
-	"""
-	if 	ChangeLimit == None: return True
-
-	category_list =zip(*PathInfo)[ConnInfoInd['line_category']]
-	category_list=category_list + (ConnectionInfo[ConnInfoInd['line_category']],)
-	
-	temp=category_list[0]
-	count=0
-
-	for i in range(len(category_list)):
-		if(category_list[i]!=temp):
-			count+=1
-			temp=category_list[i]
-
-	if count > (ChangeLimit+1):
-		return False
-	else:
-		 return True
-
-
 def CheckMinStationCount(ConnectionInfo, PathInfo, MinStationCount, EndStation, RouteConditions):
 	"""
 	Check if the number of stations of route (N) remains less than the lower limit 
@@ -3130,8 +3182,6 @@ def CheckIfEachStationIsVisitedOnlyOnce(ConnectionInfo, PathInfo, EndStation, Ro
 	else: 
 		return False
 
-
-
 def CheckDurationWithNextConnection(ConnectionInfo, PathInfo, LatestArrivalIn):
 	"""
 	Return true if the total duration of path + connection is 
@@ -3157,7 +3207,6 @@ def CheckDurationWithNextConnection(ConnectionInfo, PathInfo, LatestArrivalIn):
 		return True
 	else:
 		return False
-
 
 def CheckMinDurationWithNextConnection(ConnectionInfo, PathInfo, EarliestArrivalIn, EndStation, RouteConditions):
 	"""

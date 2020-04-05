@@ -34,7 +34,7 @@ def TEST_ReadTimeTable():
 	# conditions for tour search
 	RouteConditions1 = {
 		# von und bis Haltestelle (mandatory condition)
-		Cond.StartAndEndStations: (8507000,8507000), 	
+		Cond.StartAndEndStations: (8507000, 8507000), 	
 		
 		# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
 		# determines earliest and latest arrival to end station
@@ -94,12 +94,6 @@ def TEST_FindAndDisplayRoutes():
 
 		# return routes found in x seconds
 		Cond.MaxSearchTimeInSeconds: (10,),
-
-		Cond.DistinctCategoryLimit: (3,),
-
-		Cond.CategoryChangeLimit: (1,),
-
-		
 		}
 
 	print "\nFind all routes for the given route conditions..."
@@ -132,5 +126,4 @@ def TEST_FindAndDisplayRoutes():
 
 # test module
 if __name__ == '__main__':
-	TEST_FindAndDisplayRoutes()
-
+	TEST_FindAndDisplayRoutes() 

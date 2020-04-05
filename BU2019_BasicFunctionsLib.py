@@ -85,7 +85,7 @@ def ConvertDateToOrdinal(MyDate):
 
 def ConvertOrdinalToDate(DateOrd):
 	"""
-	Convert ordinal date to date variable like date(210,11,22)
+	Convert ordinal date to date variable like date(2010,11,22)
 	"""
 	return date.fromordinal(DateOrd)
 
@@ -300,7 +300,6 @@ def GetDayMonthYearOfDate(DateOrd):
 	"""
 	d = date.fromordinal(DateOrd)
 	return (d.day, d.month, d.year)
-
 
 def GetAvailabilityPerWeekdayInPeriod(DayOrdList, FirstDayOfPeriod, LastDayOfPeriod, WeekdayGroups=WD):
 	"""
@@ -1339,7 +1338,7 @@ def PrettyStringRouteInfo(RouteInfo):
 	# see https://docs.python.org/2/library/string.html
 
 	# header string
-	RouteInfoStr = " LineID   FromStat - ToStat  Depart - Arrival Mng Gattung Line TravelNo TravelID ConnectID\n" \
+	RouteInfoStr = " LineID   FromStat - ToStat  Depart - Arrival Mng Categ. Line TravelNo TravelID ConnectID\n" \
 		+ 		   "------------------------------------------------------------------------------------------\n"
 	#              " 100|S|12  8500000 - 8503000   09:30 - 09:30  None     W  None    None    None 		""
 
@@ -1385,7 +1384,7 @@ def PrettyStringRouteSegmentsInfo(RouteSegments):
 	# see https://docs.python.org/2/library/string.html
 
 	# header string
-	RouteSegInfoStr = " Nr LinieID    Line-Interval      HstVon*-HstBis   Hst-Interval 	 TU Gat. Linie FahrtNr FahrtID \n" \
+	RouteSegInfoStr = " Nr LineID    Line-Interval      FromStat*-ToStat  Stat-Interval 	TU Cat. Line TravelNr TravelID \n" \
 		+ 		   	  "----------------------------------------------------------------------------------------------------\n"
 	#              	  " 1  7.S14b   (09:12-09:20:  8m)  8503000-8503129 (09:20-09:34: 14m)  11   S    14   19433    6599"
 
@@ -1453,12 +1452,12 @@ def PrettyStringExtendedRouteSegmentsInfo(RouteSegments, MSpec=None):
 	# header string
 	RouteSegInfoStr = None
 	if MSpec:
-		RouteSegInfoStr = " Nr LinieID    Line-Interval      HstVon*-HstBis   Hst-Interval 	 ZF  Measure TU Gat. Linie FahrtNr FahrtID \n" \
-			+ 		   	  "-------------------------------------------------------------------------------------------------------\n"
+		RouteSegInfoStr = " Nr  LineID    Line-Interval     FromStat*-ToStat  Stat-Interval    TW  Measure  Mng  Cat Line TravNr TravID \n" \
+			+ 		   	  "-------------------------------------------------------------------------------------------------------------\n"
 		#                 " 1    -1     (05:15-08:19:184m)  8576937-8589934 (05:00-05:15: 15m)  1          870 NFB    63   63011    4126"
 
 	else:
-		RouteSegInfoStr = " Nr LinieID    Line-Interval      HstVon*-HstBis   Hst-Interval 	 ZF  TU Gat. Linie FahrtNr FahrtID \n" \
+		RouteSegInfoStr = " Nr LinieID    Line-Interval     FromStat*-ToStat  Stat-Interval 	TW  TU Cat. Line TravelNr TravelID \n" \
 			+ 		   	  "-------------------------------------------------------------------------------------------------------\n"
 		#                 " 1    -1     (05:15-08:19:184m)  8576937-8589934 (05:00-05:15: 15m)  1  870 NFB    63   63011    4126"
 
@@ -1467,26 +1466,21 @@ def PrettyStringExtendedRouteSegmentsInfo(RouteSegments, MSpec=None):
 		RouteSegInfoStr += PrettyStringExtendedSegmentInfo(SegmentInfo, SegmentNr, MSpec)
 	return RouteSegInfoStr	
 
-def PrettyStringAssignmentSolution(TDVlist, TestCustomers, VariantToRoute):
+def PrettyStringAssignmentSolution(TDRlist, TestCustomers):
 	"""
 	Return a well-formatting string that display an assignment (Einsatz) solution.
 	"""
-	SolutionInfoStr = "Test Customer            date 			VariantNr/RouteNr\n" \
-		+             "-----------------------------------------------------------\n"
+	SolutionInfoStr = "Test Customer            date 			RouteInd\n" \
+		+             "-------------------------------------------------\n"
 	
-	for tdv in TDVlist:
-		(t,d,v) = tdv 
+	for tdr in TDRlist:
+		(t,d,r) = tdr 
 		TestCustName = TestCustomers[t]
 		DateStr = ConvertDateOrdinalToDateString(d)
-		VariantNr = v 
-		VarStr = "None/None"
-		
-		if v in VariantToRoute:
-			VarStr = "%s/%s" % (VariantNr, VariantToRoute[v])
 			
 		SolutionInfoStr += '{:<25}'.format(TestCustName) \
 			+ DateStr + "          " \
-			+ '{:^10}'.format(VarStr) + '\n'
+			+ '{:^5}'.format(str(r)) + '\n'
 	
 	return SolutionInfoStr
 
@@ -2093,14 +2087,14 @@ if __name__ == '__main__':
 		print "TEST GetCommonElementsOfAllLists(*lists)"
 		CommonList = GetCommonElementsOfAllLists([1,2,3], [2,3,4,5], [2,4,5,3], [4,5,6,7,2,3])
 		print CommonList
-		#quit()
+		quit()
 
 	# TEST SelectLargestList
 	if True:
 		print "TEST SelectLargestList"
 		LargestList = SelectLargestList([1,2,3], [2,3,4,5], [2,4,5], [4,5,6,7])
 		print LargestList
-		#quit()
+		quit()
 
 	# GetTotalValueOfInterval(ValuePerInterval, Interval)
 	ValuePerInterval = {
@@ -2117,7 +2111,7 @@ if __name__ == '__main__':
 	print "SegmentsPerInterval:"
 	PrintDictionaryContent(SegmentsPerInterval)
 
-	#quit()
+	quit()
 
 	# GetWeekdaysOfMonthString(month, year, WeekdayList, DecemberOption=0)
 	WeekdayList = [1,3,5]
@@ -2143,7 +2137,7 @@ if __name__ == '__main__':
 
 	quit()
 
-	#GetCorrespondingValueOfInterval(ValuePerInterval, 3)
+	# GetCorrespondingValueOfInterval(ValuePerInterval, x)
 	IntervalValues = [1, 5, 10, 15, 25, 40, 60]
 	print "test GetCorrespondingValueOfInterval(ValuePerInterval, x) with LineMeasurementDistributionToMonths"
 	print "LineMeasurementDistributionToMonths:"
@@ -2153,7 +2147,7 @@ if __name__ == '__main__':
 		y = GetCorrespondingValueOfInterval(LineMeasurementDistributionToMonths, x)
 		print "#LineMeasurements: %s, #MinMonths: %s" % (x, y)
 
-	#quit()
+	quit()
 
 	# CheckExactSequenceOfValues(ValueSequence, NextValue, TargetSequence)
 	print "test CheckExactSequenceOfValues(ValueSequence, NextValue, TargetSequence)"
@@ -2172,7 +2166,7 @@ if __name__ == '__main__':
 	(IfMatched, MatchedSequence) = CheckExactSequenceOfValues(ValueSequence, TargetSequence)
 	print "ValueSequence = %s, TargetSequence = %s - If matched? %s MatchedSequence: %s" % (ValueSequence, TargetSequence, IfMatched, MatchedSequence)
 
-	#quit()
+	quit()
 
 	# GetWeekdaysOfMonth(month, year, WeekdayList)
 	print "test GetWeekdaysOfMonth"
@@ -2185,7 +2179,7 @@ if __name__ == '__main__':
 			print "\nDays for month: %s, year: %s, WeekdayList: %s" % (m,y,str(w))
 			print GetWeekdaysOfMonth(m, y, w)
 
-	#quit()
+	quit()
 
 	# ReturnListElementsWithinInterval(OrderedList, ReferenceValue, Distance, SearchMethod=1)
 	OrderedList = range(1,18,2)
@@ -2326,6 +2320,5 @@ if __name__ == '__main__':
 	# requires MS Access DB
 	print "DepotBahnhof:"
 	print DepotBahnhofTK()
-
 
 
