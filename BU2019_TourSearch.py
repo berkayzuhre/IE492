@@ -766,6 +766,7 @@ def FindAllRoutes(dbcur, RouteConditions):
     
     Return: PathInfoList (synonym for RouteInfoList)
 	"""
+
 	if not RouteConditions:
 		return None
 
@@ -848,50 +849,51 @@ def FindAllRoutes(dbcur, RouteConditions):
 	(StatusReport, TerminationReasons) = Cond.ResetClassVariables() 
 	return (RouteInfoList, StatusReport, TerminationReasons)
 
-def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex, PathInfo=[]):
-    """ 
-    Find all possible routes (w.r.t. time table) from start to end station w.r.t.
-    all conditions given by the dictionary RouteConditions.
-    """
-    PathInfo = PathInfo + [ConnectionInfo]
+def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex, level=0, PathInfo=[] ):
+	""" 
+	Find all possible routes (w.r.t. time table) from start to end station w.r.t.
+	all conditions given by the dictionary RouteConditions.
+	"""
 
-    if Cond.IfTestRouteSearch:
-    	Stations = GetAllStationsOfRoute(PathInfo)
-    	print "\nStations of Path (%s): ++++++++" % len(Stations)
-    	print Stations
-    	print "Route Information:"
-    	print PrettyStringRouteInfo(PathInfo)
+	PathInfo = PathInfo + [ConnectionInfo]
+
+	if Cond.IfTestRouteSearch:
+		Stations = GetAllStationsOfRoute(PathInfo)
+		print "\nStations of Path (%s): ++++++++" % len(Stations)
+		print Stations
+		print "Route Information:"
+		print PrettyStringRouteInfo(PathInfo)
 
     # check successful termination
     # if len(PathInfo) > 1 and ConnectionInfo[ConnInfoInd['station_to']] == EndStation:  
-    if CheckIfPathTerminatesSuccessfully(ConnectionInfo, PathInfo, RouteConditions, EndStation):
-     	if Cond.IfTestRouteSearch:
-    		print "End Station is reached!"	
-    	return [PathInfo]
+	if CheckIfPathTerminatesSuccessfully(ConnectionInfo, PathInfo, RouteConditions, EndStation):
+		if Cond.IfTestRouteSearch:
+			print "End Station is reached!"	
+		return [PathInfo]
 
     # current (this iteration's) path length
-    CurPathLen = len(PathInfo)
+	CurPathLen = len(PathInfo)
 
     # get next connections
-    start_station = ConnectionInfo[ConnInfoInd['station_to']]
-    departure_hour = ConnectionInfo[ConnInfoInd['arrival_hour']] 	
-    departure_min = ConnectionInfo[ConnInfoInd['arrival_min']]
+	start_station = ConnectionInfo[ConnInfoInd['station_to']]
+	departure_hour = ConnectionInfo[ConnInfoInd['arrival_hour']] 	
+	departure_min = ConnectionInfo[ConnInfoInd['arrival_min']]
 
     # TEST BU2019
-    if False:
-	    print 'ConnInfoInd: ' + str(ConnectionInfo)
-	    print 'start_station,departure_hour,departure_min: %s, %s, %s' % (start_station, departure_hour, departure_min)
-	    time.sleep(0.1)
+	if False:
+		print 'ConnInfoInd: ' + str(ConnectionInfo)
+		print 'start_station,departure_hour,departure_min: %s, %s, %s' % (start_station, departure_hour, departure_min)
+		time.sleep(0.1)
     
     # mandatory conditions
-    WaitLimit = RouteConditions[Cond.MaxWaitingTimeAtStation][0]
+	WaitLimit = RouteConditions[Cond.MaxWaitingTimeAtStation][0]
     
     # get next connections from the station
-    ConnectionInfoList = GetListOfNextConnections(TimeTableList, TimeTableIndex, StationHourIndex, start_station, departure_hour, departure_min, WaitLimit)
+	ConnectionInfoList = GetListOfNextConnections(TimeTableList, TimeTableIndex, StationHourIndex, start_station, departure_hour, departure_min, WaitLimit)
 
     # insert on-foot connections (Zu Fuss, ZF) to nearby stations into ConnectionInfoList
     # cancel (Tunc 4/3/2019)
-    if False:
+	if False:
 	    StationMeasurementTime = ReqStationMeasureTime
 	    
 	    if Cond.MaxNumberOfSubsequentStationPassagesOnFoot in RouteConditions \
@@ -906,31 +908,49 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		    	ConnectionInfoList = AddConnectionsToListAfterDepartureTime(ConnectionInfoList, OnFootConnections1)
 		    	ConnectionInfoList = AddConnectionsToListAfterDepartureTime(ConnectionInfoList, OnFootConnections2)
 
-    if Cond.IfTestRouteSearch:
+	if Cond.IfTestRouteSearch:
 		print "Next connections:"
 		for c in ConnectionInfoList:
 			print c
 		time.sleep(Cond.TestWaitingTime)
 
-    if not ConnectionInfoList:		# Endstation: Node w/o successor nodes
-    	return []
+	if not ConnectionInfoList:		# Endstation: Node w/o successor nodes
+		return []
 
-    PathInfoList = []
+	PathInfoList = []
+	res=[]
+	
+	for ConnectionInfo in ConnectionInfoList:
+		res.append(Cond.CheckIfConnectionShouldBeSelected(ConnectionInfo, PathInfo, EndStation, RouteConditions))
+		
+		if res[-1] == None: return[]
 
-    for ConnectionInfo in ConnectionInfoList:
-		res = Cond.CheckIfConnectionShouldBeSelected(ConnectionInfo, PathInfo, EndStation, RouteConditions)
+		if (res[-1] == True) & (PathInfo[-1][ConnInfoInd['station_from']] != ConnectionInfo[ConnInfoInd['station_to']]):
 
+			res[-1] = float(1)/float(ConnectionInfo[ConnInfoInd['arrival_totalmin']]-ConnectionInfo[ConnInfoInd['departure_totalmin']])
+		
+		else:
+			res[-1]=-1
+		
 		# test
-		if Cond.IfTestRouteSearch:
-			if res == None or res == False:
-				print "CheckIfConnectionShouldBeSelected: %s" % res
+		# if Cond.IfTestRouteSearch:
+		# 	if res[-1] == None or res[-1] == False:
+		# 		print "CheckIfConnectionShouldBeSelected: %s" % res
 
-	   	if res == None: return[] 
-	   	if res == False: continue
+	b=ConnectionInfoList
 
-	   	# recursive call
+	c= [i for i, n in enumerate(res) if n == -1]
+	for index in sorted(c, reverse=True):
+		del b[index]
+
+	OrderedConnections=[b for _,b in sorted(zip(res,b),reverse=True)]
+	#PriorityConnection=ConnectionInfoList[res.index(max(res))]
+
+	for ConnectionInfo in OrderedConnections:
+		level=level+1
+		# recursive call
 		extended_paths = FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-			TimeTableList, TimeTableIndex, StationHourIndex, PathInfo)
+			TimeTableList, TimeTableIndex, StationHourIndex, PathInfo,level=1)
 
 		# report status
 		if Cond.ReportDuringRouteSearch in RouteConditions:
@@ -950,7 +970,7 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 			# no need to recheck route unless current connection is the last one 
 			# LastConnection = (ConnectionInfo == p[-1])
 			LastConnection = (CurPathLen == len(p) -1 and ConnectionInfo == p[-1])
-			
+				
 			if LastConnection:
 
 				if Cond.CheckIfRouteShouldBeSelected(p, RouteConditions):
@@ -969,14 +989,14 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 
 					# test
 					IncrementDicValue(Cond.RouteCountPerRouteLength, CurPathLen)
-					
-			else:
-				# not last connection, no need to recheck the route
-				# PathInfoList.append(p)
-				# IncrementDicValue(SelectedRoutesPerLevel, CurPathLen)
-				pass
-    
-    return PathInfoList
+						
+				else:
+					# not last connection, no need to recheck the route
+					# PathInfoList.append(p)
+					# IncrementDicValue(SelectedRoutesPerLevel, CurPathLen)
+					pass
+		
+	return PathInfoList
 
 # **************************************************************************************
 # Path/Connection Evaluation Functions

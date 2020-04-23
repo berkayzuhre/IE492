@@ -41,8 +41,8 @@ WeekDays = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunda
 
 # elements of ConnectionInfo (ConnInfoInd[FieldName]=FieldIndex)
 ConnInfoInd = {
-	'station_from' : 		0, 		
-	'station_to': 			1, 		
+	'station_from' : 		0,
+	'station_to': 			1,
 	'conn_id':				2,			# connection id
 	'line_id': 				3,			# unique line id
 	'travel_id':			4,

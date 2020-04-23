@@ -83,7 +83,7 @@ RouteConditions1 = {
 	Cond.ReportDuringRouteSearch: (10,), 
 
 	# return routes found in x seconds
-	Cond.MaxSearchTimeInSeconds: (10,),
+	Cond.MaxSearchTimeInSeconds: (40,),
 	}
 
 RelevantLineCategories = ['S']		# ['RE','R','IR','IC','ICE','S']
