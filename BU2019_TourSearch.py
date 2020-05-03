@@ -738,7 +738,7 @@ def ReadTimeTable(dbcur, RouteConditions):
 			FieldName = OrderedFields[i]
 			FieldInd = OrderedFields.index(FieldName)
 			l[ConnInfoInd[FieldName]] = row[FieldInd]
-
+		l[ConnInfoInd['connection_score']]=None
 		t = tuple(l)
 		TimeTableList.append(t)
 

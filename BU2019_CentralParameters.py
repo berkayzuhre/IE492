@@ -58,6 +58,7 @@ ConnInfoInd = {
 	'arrival_totalmin': 	14,
 	'trafficdays_hexcode': 	15,
 	'station_order':		16,
+	'connection_score':		17,
 	}
 
 # elements of a SegmentInfo value list
