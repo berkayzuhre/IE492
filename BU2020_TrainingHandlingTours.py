@@ -1,16 +1,9 @@
 #!/usr/bin/env python
-#rt sys, os
-import time
-import math
-from timeit import default_timer
-from datetime import date 
-from datetime import datetime
-from datetime import timedelta
-import calendar
-import itertools as it -*- coding: utf-8 -*-
+#-*- coding: utf-8 -*-
 # Created by Tunc Ali Kütükcüoglu (on 24. Feb 2020)
 # see: https://software.tuncalik.com/travel-and-assignment-planning-software-in-python/4812
 # Copyrights: Tunc Ali Kütükcüoglu (senior data analyst & developer)
+
 """
 Training script for handling routes:
 - Find some routes to work with (simple travel planning)
@@ -20,7 +13,15 @@ Training script for handling routes:
 - Measurement Variants (Measurement Specifications)
 """
 import psycopg2
-impo
+import sys, os
+import time
+import math
+from timeit import default_timer
+from datetime import date 
+from datetime import datetime
+from datetime import timedelta
+import calendar
+import itertools as it 
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
@@ -83,7 +84,7 @@ RouteConditions1 = {
 	Cond.ReportDuringRouteSearch: (10,), 
 
 	# return routes found in x seconds
-	Cond.MaxSearchTimeInSeconds: (40,),
+	Cond.MaxSearchTimeInSeconds: (10,),
 	}
 
 RelevantLineCategories = ['S']		# ['RE','R','IR','IC','ICE','S']
@@ -203,82 +204,9 @@ if __name__ == '__main__':
 	print "Line Measurement (LM) Coverage of Routes"
 	print LineSeparator
 
-	arr=np.array(TimeTableList)
-	DistinctLineID=np.unique(arr[:,ConnInfoInd['line_id']])
-	DistinctLineID = [x for x in DistinctLineID if x is not None and x is not '-1']
-
-	StationListForLines=dict() #Dictionary Containing Stations that Lines Operate
-
-	for line in DistinctLineID:
-
-		StationList=set()
-
-		for connection in arr:
-
-			if connection[ConnInfoInd['line_id']]==line:
-				StationList.add(connection[ConnInfoInd['station_from']])
-				StationList.add(connection[ConnInfoInd['station_to']])
-
-		StationListForLines[line] = StationList
-
-	#PrintDictionaryContent(StationListForLines)
-
-	def common_member(a, b): 
-		if (a & b): 
-			return True 
-		else: 
-			return False
-
-	def Intersection(StationListForLines):
-		
-		Proximity1=dict()
-		
-
-		for index1, (key1, value1) in enumerate(StationListForLines.items()):
-			Proximity=set()
-			for index2, (key2, value2) in enumerate(StationListForLines.items()):
-
-				if common_member(value1, value2) and key1!=key2:
-
-					Proximity.add(key2)
-				
-			Proximity1[key1]=Proximity
-		
-		return Proximity1
-
-	Proximity1= Intersection(StationListForLines) # Dictionary Containing Intersecting Lines
-
-	Proximity2=dict() #Dictionary Containing Lines and Their Neighbor Lines Reachable with 2 transfers
-
-	for index1, (key1, value1) in enumerate(Proximity1.items()):
-
-		Proximity=set()
-
-		for index2, (key2, value2) in enumerate(Proximity1.items()):
-			
-			if key2 in value1:
-
-				Proximity=Proximity.union(value2)
-		
-		Proximity2[key1]=Proximity
-
-	# print "1Proximity" 
-	# print Proximity1
-	# print "2Proximity" 
-	# print Proximity2
-
-	StartStation=RouteConditions1[Cond.StartAndEndStations][0]
-
-	PossibleStartingLines = [ k for k in StationListForLines.keys() if StartStation in StationListForLines[k] ]
-
-	ReachableLines2=[Proximity2.get(key) for key in PossibleStartingLines]
-	ReachableLines1=[Proximity1.get(key) for key in PossibleStartingLines]
-
-	ReachableLines = set().union(*ReachableLines2) 
-	ReachableLines =ReachableLines.union(*ReachableLines1) #Reachable Lines with at most 2 transfers starting from specified station 
-
 	# In order to calculate the Line Measurement (LM) coverage of a route,
 	# we need to have first LMRequirementsAll per LineKey (LineID, TimeWindow, WeekdayGroup):
+
 	LMRequirementsAll = {
 		('6.S10',2,11):   2,
 		('4.S6b',2,11):   2,

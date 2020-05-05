@@ -293,8 +293,9 @@ DistinctStations=np.unique(arr[:,ConnInfoInd['station_from']])
 b=np.unique(arr[:,ConnInfoInd['station_to']])
 DistinctStations=set(DistinctStations)
 b=set(b)
-DistinctStations.union(b)
+DistinctStations.update(b)
 #print DistinctStations
+
 
 #Setting the connection score to "0" for Required Lines' connections
 for connection_row in TimeTableList:
@@ -306,18 +307,17 @@ for connection_row in TimeTableList:
 		connection_row=tuple(connection_row) #converting back to tuple
 		TimeTableList[ind]=connection_row #changing the TimeTableList
 
-
-
 CoveredStations=set()
 
-def ConnectionScoring(StationList,TimeTableList,level):
+def ConnectionScoring(StationList,level):
 	#StationList: Stations of lines which we want to cover (trial is used as an example)
 	#level= neighborhood level of all other connections
 	
 	global CoveredStations #Set of so far Covered stations 
+	global TimeTableList
 
 	if CoveredStations == DistinctStations:
-		return TimeTableList #Returns final(with final connection scores) TimeTableList
+		return #Returns final(with final connection scores) TimeTableList
 
 	if len(CoveredStations) is 0:
 		CoveredStations=CoveredStations.union(StationList) 
@@ -328,10 +328,11 @@ def ConnectionScoring(StationList,TimeTableList,level):
 
 		for connection_row in TimeTableList:
 			
-			if ((connection_row[ConnInfoInd['station_from']]==station) and (connection_row[ConnInfoInd['station_to']] not in CoveredStations)):
+			if connection_row[ConnInfoInd['station_from']]==station:
 				ind=TimeTableList.index(connection_row) 
 				connection_row=list(connection_row) #converting to list for changing connection score
-				Intersection.add(connection_row[ConnInfoInd['station_to']])
+				if connection_row[ConnInfoInd['station_to']] not in CoveredStations:
+					Intersection.add(connection_row[ConnInfoInd['station_to']])
 
 				if ((connection_row[ConnInfoInd['connection_score']]==None) or (connection_row[ConnInfoInd['connection_score']]>level)):
 					connection_row[ConnInfoInd['connection_score']]=level
@@ -339,8 +340,17 @@ def ConnectionScoring(StationList,TimeTableList,level):
 				TimeTableList[ind]=connection_row #changing the TimeTableList
 				
 	level=level+1
-	#print level
-	ConnectionScoring(Intersection,TimeTableList,level)
+	if level ==15:
+		print "sadas"
+	ConnectionScoring(Intersection,level)
 
-a=ConnectionScoring(trial,TimeTableList,1)
+# ConnectionScoring(trial,1)
 
+# print "asdsa"
+
+# for rows in TimeTableList:
+# 	if rows[ConnInfoInd['connection_score']]==0:
+# 		print rows
+
+
+# print "asdasd"
