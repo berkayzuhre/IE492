@@ -17,11 +17,14 @@ import sys, os
 import time
 import math
 from timeit import default_timer
+import timeit
 from datetime import date 
 from datetime import datetime
 from datetime import timedelta
+from openpyxl import Workbook
 import calendar
 import itertools as it 
+from time import time
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
@@ -84,7 +87,7 @@ RouteConditions1 = {
 	Cond.ReportDuringRouteSearch: (10,), 
 
 	# return routes found in x seconds
-	Cond.MaxSearchTimeInSeconds: (10,),
+	Cond.MaxSearchTimeInSeconds: (300,),
 	}
 
 RelevantLineCategories = ['S']		# ['RE','R','IR','IC','ICE','S']
@@ -120,7 +123,6 @@ RouteConditions2 = {
 	# return routes found in x seconds
 	Cond.MaxSearchTimeInSeconds: (30,),
 	}
-
 
 # **************************************************************************************
 
@@ -190,6 +192,28 @@ if __name__ == '__main__':
 	print LineSeparator
 
 	TEST_FindAndDisplayRoutes() 
+
+	# wb = Workbook()
+
+	# ws = wb.active
+
+	# # Rows can also be appended
+	# for paths in RouteInfoList1:
+	# 	ind1=RouteInfoList1.index(paths)
+	# 	for connections in paths:
+	# 		ind2=paths.index(connections)
+	# 		ws.append(RouteInfoList1[ind1][ind2])
+
+	# ws.insert_cols(1)
+	# cell_ref=1
+	# for paths in RouteInfoList1:
+	# 	ind1=RouteInfoList1.index(paths)
+	# 	for connections in paths:
+	# 		cell='A' + str(cell_ref)
+	# 		ws[cell] = ind1+1
+	# 		cell_ref=cell_ref+1
+	# # Save the file
+	# wb.save("sample.xlsx")
 
 	print LineSeparator
 	print "Evaluate tours"

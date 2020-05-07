@@ -14,11 +14,14 @@ import sys, os
 import time
 import math
 from timeit import default_timer
+import timeit
 from datetime import date 
 from datetime import datetime
 from datetime import timedelta
+
 import calendar
 import itertools as it
+import pandas as pd
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
@@ -978,7 +981,7 @@ def FindAllRoutes(dbcur, RouteConditions):
     
     Return: PathInfoList (synonym for RouteInfoList)
 	"""
-
+	
 	if not RouteConditions:
 		return None
 
@@ -1050,6 +1053,7 @@ def FindAllRoutes(dbcur, RouteConditions):
 			print "FINISHED reading station chain information from database, in %.2f seconds." % (time.time() - st)
 			print "TEST: SizeOf global variable global_StationChainInfoPerFahrtID in kilobytes: %d" % math.floor(sys.getsizeof(global_StationChainInfoPerFahrtID) / 2**10)
 
+	#DistinctLineID and DistinctStation Set Generation
 	arr=np.array(TimeTableList)
 	DistinctStations=np.unique(arr[:,ConnInfoInd['station_from']])
 	b=np.unique(arr[:,ConnInfoInd['station_to']])
@@ -1057,52 +1061,6 @@ def FindAllRoutes(dbcur, RouteConditions):
 	b=set(b)
 	DistinctStations.update(b)
 
-	global CoveredStations
-	CoveredStations=set()
-
-	def ConnectionScoring(StationList,level):
-		#StationList: Stations of lines which we want to cover (trial is used as an example)
-		#level= neighborhood level of all other connections
-		
-		global CoveredStations #Set of so far Covered stations 
-		global TimeTableList
-
-		if CoveredStations == DistinctStations:
-			return #Returns final(with final connection scores) TimeTableList
-
-		if len(CoveredStations) is 0:
-			CoveredStations=CoveredStations.union(StationList) 
-		else:
-			CoveredStations.update(StationList)
-		Intersection=set()
-		for station in StationList:
-
-			for connection_row in TimeTableList:
-				
-				if connection_row[ConnInfoInd['station_from']]==station:
-					ind=TimeTableList.index(connection_row) 
-					connection_row=list(connection_row) #converting to list for changing connection score
-					if connection_row[ConnInfoInd['station_to']] not in CoveredStations:
-						Intersection.add(connection_row[ConnInfoInd['station_to']])
-
-					if ((connection_row[ConnInfoInd['connection_score']]==None) or (connection_row[ConnInfoInd['connection_score']]>level)):
-						connection_row[ConnInfoInd['connection_score']]=level
-					connection_row=tuple(connection_row) #converting back to tuple
-					TimeTableList[ind]=connection_row #changing the TimeTableList
-					
-		level=level+1
-		ConnectionScoring(Intersection,level)
-
-	for connection_row in TimeTableList:
-
-		if connection_row[ConnInfoInd['line_id']] in list(list(zip(*LMRequirementsAll)[0])):
-			ind=TimeTableList.index(connection_row) #converting to list for changing connection score
-			connection_row=list(connection_row)
-			connection_row[ConnInfoInd['connection_score']]=0
-			connection_row=tuple(connection_row) #converting back to tuple
-			TimeTableList[ind]=connection_row #changing the TimeTableList
-	
-	arr=np.array(TimeTableList)
 	DistinctLineID=np.unique(arr[:,ConnInfoInd['line_id']])
 	DistinctLineID = [x for x in DistinctLineID if x is not None and x is not '-1']
 	StationListForLines=dict() #Dictionary Containing Stations that Lines Operate
@@ -1119,13 +1077,83 @@ def FindAllRoutes(dbcur, RouteConditions):
 
 		StationListForLines[line] = StationList
 
-	a=[StationListForLines[key] for key in list(list(zip(*LMRequirementsAll)[0]))]
-	a=set().union(*a)
-	ConnectionScoring(a,1)
+	#Initializing RequirementsScores data frame
+	RequirementsSet=set(list(list(zip(*LMRequirementsAll)[0])))
+	RequirementsSet=list(RequirementsSet)
+
+	conn_id=[]
+	for rows in TimeTableList:
+		conn_id.append(rows[ConnInfoInd['conn_id']])
+
+	global RequirementScores
+	RequirementScores = pd.DataFrame(np.full((len(TimeTableList),len(RequirementsSet)),None),columns=RequirementsSet)
+	RequirementScores['conn_id']=conn_id
+	RequirementScores=RequirementScores.set_index('conn_id',drop=True)
+	
+	def ConnectionScoring(StationList,level,CoveredStations):
+		#StationList: Stations of lines which we want to cover (trial is used as an example)
+		#level= neighborhood level of all other connections
+		# CoveredStations = Set of so far Covered stations
+
+		global RequirementScores
+
+		if CoveredStations == DistinctStations:
+			return #Returns final(with final connection scores) RequirementScores
+
+		if len(CoveredStations) is 0:
+			CoveredStations=CoveredStations.union(StationList) 
+		else:
+			CoveredStations.update(StationList)
+		
+		Intersection=set()
+
+		for station in StationList:
+
+			for connection_row in TimeTableList:
+				
+				if connection_row[ConnInfoInd['station_from']]==station:
+
+					if connection_row[ConnInfoInd['station_to']] not in CoveredStations:
+						Intersection.add(connection_row[ConnInfoInd['station_to']])
+
+					if (RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]==None) or (RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]>level):
+						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=level
+
+		level=level+1
+		ConnectionScoring(Intersection,level,CoveredStations)
+	
+	start_time1 = timeit.default_timer()
+	#Filling out the Requirements Score dataframe 
+	for requirement in RequirementsSet:
+		
+		Stations=StationListForLines[requirement]
+		Stations=list(Stations)
+		#Setting the connection score to "0" for requirement line's connections
+		for connection_row in TimeTableList:
+			if connection_row[ConnInfoInd['line_id']] == requirement:
+				RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=0
+
+		CoveredStations=set()
+		ConnectionScoring(Stations,1,CoveredStations)
+	elapsed1 = timeit.default_timer() - start_time1
+	print 'initial reqscore takes %f ' %(elapsed1)
+
+	# #Changing the TimeTable List
+	# for connection_row in TimeTableList:
+	# 	ind=TimeTableList.index(connection_row)
+	# 	connection_row=list(connection_row)
+	# 	conn_id=connection_row[ConnInfoInd['conn_id']]
+	# 	connection_row[ConnInfoInd['connection_score']]=RequirementScores.loc[conn_id].sum(skipna=True)
+	# 	connection_row=tuple(connection_row)
+	# 	TimeTableList[ind]=connection_row 
+
+	# a=[StationListForLines[key] for key in list(list(zip(*LMRequirementsAll)[0]))]
+	# a=set().union(*a)
+	# ConnectionScoring(a,1)
 
 	# find all possible paths
 	FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-		TimeTableList, TimeTableIndex, StationHourIndex)
+		TimeTableList, TimeTableIndex,StationHourIndex,RequirementScores)
 	PathInfoList = Cond.SelectedRoutes
 
 	# apply filter
@@ -1135,12 +1163,12 @@ def FindAllRoutes(dbcur, RouteConditions):
 	(StatusReport, TerminationReasons) = Cond.ResetClassVariables() 
 	return (RouteInfoList, StatusReport, TerminationReasons)
 
-def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex, PathInfo=[] ):
+def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores,PathInfo=[]):
 	""" 
 	Find all possible routes (w.r.t. time table) from start to end station w.r.t.
 	all conditions given by the dictionary RouteConditions.
 	"""
-
+	
 	PathInfo = PathInfo + [ConnectionInfo]
 
 	if Cond.IfTestRouteSearch:
@@ -1156,7 +1184,23 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		if Cond.IfTestRouteSearch:
 			print "End Station is reached!"	
 		return [PathInfo]
+	
 
+	#Measurement Check
+
+	if ConnectionInfo[ConnInfoInd['line_id']] in set(list(list(zip(*LMRequirementsAll)[0]))):
+		start_time1 = timeit.default_timer()
+		(LMCoveragePerSegment, LMCoveragePerLineKey) = \
+			GetLMCoverageOfRoute(PathInfo, 10, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
+		
+		if len(LMCoveragePerLineKey)!=0:
+
+			measured_lines=set(list(list(zip(*LMCoveragePerLineKey)[0])))
+			measured_lines=list(measured_lines)
+			RequirementScores.loc[:,measured_lines]=0
+		elapsed1 = timeit.default_timer() - start_time1
+		print elapsed1
+	
     # current (this iteration's) path length
 	CurPathLen = len(PathInfo)
 
@@ -1212,17 +1256,12 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		if res[-1] == None: return[]
 
 		if res[-1] == True:
-			
-			res[-1]= TimeTableList[TimeTableList.index(ConnectionInfo)][ConnInfoInd['connection_score']]
+			connection_id=ConnectionInfo[ConnInfoInd['conn_id']]
+			res[-1]= RequirementScores.loc[connection_id].sum(skipna=True)
 		
 		else:
 
 			res[-1]=-1
-		
-		# test
-		# if Cond.IfTestRouteSearch:
-		# 	if res[-1] == None or res[-1] == False:
-		# 		print "CheckIfConnectionShouldBeSelected: %s" % res
 
 	b=ConnectionInfoList
 
@@ -1237,7 +1276,7 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		
 		# recursive call
 		extended_paths = FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-			TimeTableList, TimeTableIndex, StationHourIndex, PathInfo)
+			TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores, PathInfo)
 
 		# report status
 		if Cond.ReportDuringRouteSearch in RouteConditions:
