@@ -1195,11 +1195,19 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		
 		if len(LMCoveragePerLineKey)!=0:
 
+			start_time1 = timeit.default_timer()
 			measured_lines=set(list(list(zip(*LMCoveragePerLineKey)[0])))
+			elapsed1 = timeit.default_timer() - start_time1
+			print 'finding measured lines %f' %(elapsed1)
+
 			measured_lines=list(measured_lines)
-			RequirementScores.loc[:,measured_lines]=0
-		elapsed1 = timeit.default_timer() - start_time1
-		print elapsed1
+
+			start_time1 = timeit.default_timer()
+			#RequirementScores.loc[:,measured_lines]=0
+			RequirementScores = RequirementScores.assign(lambda x in measured_lines=0)
+			elapsed1 = timeit.default_timer() - start_time1
+			print 'filling a cell in reqscores %f' %(elapsed1)
+	
 	
     # current (this iteration's) path length
 	CurPathLen = len(PathInfo)
