@@ -18,6 +18,10 @@ import timeit
 from datetime import date 
 from datetime import datetime
 from datetime import timedelta
+from sklearn.cluster import KMeans
+from matplotlib import pyplot as plt
+from openpyxl import Workbook
+import openpyxl
 
 import calendar
 import itertools as it
@@ -741,7 +745,6 @@ def ReadTimeTable(dbcur, RouteConditions):
 			FieldName = OrderedFields[i]
 			FieldInd = OrderedFields.index(FieldName)
 			l[ConnInfoInd[FieldName]] = row[FieldInd]
-		l[ConnInfoInd['connection_score']]=None
 		t = tuple(l)
 		TimeTableList.append(t)
 
@@ -971,7 +974,7 @@ LMRequirementsAll = {
 		('8.RE1',3,11):   2,
 }
 
-def FindAllRoutes(dbcur, RouteConditions):
+def FindAllRoutes(dbcur, RouteConditions,Requirements):
 	"""
 	Find all possible routes (w.r.t. time table) from start to end station 
     according to all conditions given in RouteConditions. 
@@ -1022,7 +1025,6 @@ def FindAllRoutes(dbcur, RouteConditions):
 	# read table with RouteConditions
 	print "START reading timetable data (Fahrplandaten) from database..."
 	st = time.time()
-	global TimeTableList
 	(TimeTableList, TimeTableIndex, StationHourIndex) = ReadTimeTable(dbcur, RouteConditions)
 	print "FINISHED reading timetable data (Fahrplandaten) from database, in %.2f seconds." % (time.time() - st)
 	print "TEST: SizeOf variable TimeTableList in kilobytes: %d" % math.floor(sys.getsizeof(TimeTableList) / 2**10)
@@ -1078,7 +1080,7 @@ def FindAllRoutes(dbcur, RouteConditions):
 		StationListForLines[line] = StationList
 
 	#Initializing RequirementsScores data frame
-	RequirementsSet=set(list(list(zip(*LMRequirementsAll)[0])))
+	RequirementsSet=set(list(list(zip(*Requirements)[0])))
 	RequirementsSet=list(RequirementsSet)
 
 	conn_id=[]
@@ -1138,6 +1140,33 @@ def FindAllRoutes(dbcur, RouteConditions):
 	elapsed1 = timeit.default_timer() - start_time1
 	print 'initial reqscore takes %f ' %(elapsed1)
 
+	# kmeans = KMeans(n_clusters=3).fit(np.transpose(RequirementScores))
+	# wcss = []
+	# for i in range(1, 20):
+	# 	kmeans = KMeans(n_clusters=i, init='k-means++', max_iter=300, n_init=10, random_state=0)
+	# 	kmeans.fit(np.transpose(RequirementScores))
+	# 	wcss.append(kmeans.inertia_)
+
+	# plt.plot(range(1, 20), wcss)
+	# plt.title('Elbow Method')
+	# plt.xlabel('Number of clusters')
+	# plt.ylabel('WCSS')
+	# plt.show()
+	
+	# ChosenNumberOfClusters=5
+
+	# kmeans=KMeans(n_clusters=ChosenNumberOfClusters, init='k-means++', max_iter=300, n_init=10, random_state=0)
+	# kmeans.fit(np.transpose(RequirementScores))
+	# workbook = openpyxl.Workbook()
+	# sheet = workbook.active
+	
+	# for i in range(1,len(kmeans.labels_)):
+
+	# 	sheet.cell(row=i, column=1, value=RequirementScores.columns.values[i-1])
+	# 	sheet.cell(row=i, column=2, value=kmeans.labels_[i-1])
+	
+	# workbook.save(filename="clusters.xlsx")
+
 	# #Changing the TimeTable List
 	# for connection_row in TimeTableList:
 	# 	ind=TimeTableList.index(connection_row)
@@ -1153,7 +1182,7 @@ def FindAllRoutes(dbcur, RouteConditions):
 
 	# find all possible paths
 	FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-		TimeTableList, TimeTableIndex,StationHourIndex,RequirementScores)
+		TimeTableList, TimeTableIndex,StationHourIndex,RequirementScores,RequirementsSet)
 	PathInfoList = Cond.SelectedRoutes
 
 	# apply filter
@@ -1163,7 +1192,7 @@ def FindAllRoutes(dbcur, RouteConditions):
 	(StatusReport, TerminationReasons) = Cond.ResetClassVariables() 
 	return (RouteInfoList, StatusReport, TerminationReasons)
 
-def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores,PathInfo=[]):
+def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores,RequirementsList,PathInfo=[]):
 	""" 
 	Find all possible routes (w.r.t. time table) from start to end station w.r.t.
 	all conditions given by the dictionary RouteConditions.
@@ -1185,11 +1214,11 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 			print "End Station is reached!"	
 		return [PathInfo]
 	
-
+	RequiredLines=set(RequirementsList)
+	start_time = timeit.default_timer()
+	
 	#Measurement Check
-
-	if ConnectionInfo[ConnInfoInd['line_id']] in set(list(list(zip(*LMRequirementsAll)[0]))):
-		start_time1 = timeit.default_timer()
+	if CheckIfLastLineCanBeMeasured(PathInfo,RequiredLines,10):
 		(LMCoveragePerSegment, LMCoveragePerLineKey) = \
 			GetLMCoverageOfRoute(PathInfo, 10, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
 		
@@ -1198,17 +1227,17 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 			start_time1 = timeit.default_timer()
 			measured_lines=set(list(list(zip(*LMCoveragePerLineKey)[0])))
 			elapsed1 = timeit.default_timer() - start_time1
-			print 'finding measured lines %f' %(elapsed1)
+			#print 'finding measured lines %f' %(elapsed1)
 
 			measured_lines=list(measured_lines)
 
 			start_time1 = timeit.default_timer()
-			#RequirementScores.loc[:,measured_lines]=0
-			RequirementScores = RequirementScores.assign(lambda x in measured_lines=0)
+			RequirementScores.loc[:,measured_lines]=0
 			elapsed1 = timeit.default_timer() - start_time1
-			print 'filling a cell in reqscores %f' %(elapsed1)
+			#print 'filling columns in reqscores %f' %(elapsed1)
 	
-	
+	#elapsed = timeit.default_timer() - start_time
+	#print 'whole measurement check %f' %(elapsed)
     # current (this iteration's) path length
 	CurPathLen = len(PathInfo)
 
@@ -1284,7 +1313,7 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		
 		# recursive call
 		extended_paths = FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-			TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores, PathInfo)
+			TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores,RequirementsList, PathInfo)
 
 		# report status
 		if Cond.ReportDuringRouteSearch in RouteConditions:
@@ -3859,11 +3888,44 @@ def CheckMaxNumberOfLineChanges(ConnectionInfo, PathInfo, MaxLineChangeLimit):
 	else:
 		return False
 
+def CheckIfLastLineCanBeMeasured(PathInfo,IncludedLines,RequiredMeasureTime):
+
+	# Assumption: Every line (lineID) is visited only once.
+	# Return false if current line is in the list IncludedStations
+	# (i.e. must be measured) but there is not enough time for measurement.
+	# IncludedLines: List of distinct lines that must be measured
+	# RequiredMeasureTime: Required time in minutes for measuring a station
+	
+	# get last line
+	LastLine =  PathInfo[-1][ConnInfoInd['line_id']]
+	
+	# check if last line must be measured
+	if LastLine not in IncludedLines:
+		return False
+
+	# get time spent on last line (in minutes)
+	LastArrival = PathInfo[-1][ConnInfoInd['arrival_hour']] * 60 + PathInfo[-1][ConnInfoInd['arrival_min']]
+	LastDeparture = PathInfo[-1][ConnInfoInd['departure_hour']] * 60 + PathInfo[-1][ConnInfoInd['departure_min']]
+
+	for i in range(2,len(PathInfo)-1):
+		line = PathInfo[-i][ConnInfoInd['line_id']]
+
+		if line == LastLine:
+			LastDeparture = PathInfo[-i][ConnInfoInd['departure_hour']] * 60 + PathInfo[-i][ConnInfoInd['departure_min']]
+		else:
+			break
+	TotalTimeOnLine = LastArrival - LastDeparture
+
+	if TotalTimeOnLine >= RequiredMeasureTime:
+		return True
+	else:
+		return False
+
 def CheckIfPathTerminatesSuccessfully(ConnectionInfo, PathInfo, RouteConditions, EndStation):
-	"""
-	Check if the route terminates successfully by reaching the end station, 
-	or by reaching one of the stations or LineIDs.
-	"""
+
+	#Check if the route terminates successfully by reaching the end station, 
+	#or by reaching one of the stations or LineIDs.
+
 	if not PathInfo or len(PathInfo) < 2:
 		return False 
 
