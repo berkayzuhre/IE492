@@ -61,7 +61,7 @@ RouteConditions1 = {
 	
 	# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
 	# determines earliest and latest arrival to end station
-	Cond.StartTimeAndDuration: (8, 0, 60, 120),		
+	Cond.StartTimeAndDuration: (8, 0, 30, 300),		
 	
 	# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
 	Cond.MaxWaitingTimeAtStation: (30,),			
@@ -139,7 +139,7 @@ def TEST_FindAndDisplayRoutes():
 	print "\nFind all routes for the given route conditions..."
 
 	# search conditions to be used
-	RouteConditions = RouteConditions2
+	RouteConditions = RouteConditions1
 
 	if Read_RouteInfoList_FromFile:
 		RouteInfoList1 = ReadVariableFromFile(PlanYear, PlanMonth, 'RouteInfoList1', directory=VariableDirectory)
@@ -418,15 +418,15 @@ if __name__ == '__main__':
 	}
 
 	# select a route in RouteInfoList1
-	Route1 =  RouteInfoList1[-2]
+	# Route1 =  RouteInfoList1[-2]
 	
-	print "\nRouteInfo:"
-	print PrettyStringRouteInfo(Route1)
+	# print "\nRouteInfo:"
+	# print PrettyStringRouteInfo(Route1)
 
 	# Line Measurement Coverage of Route1 tells us, which LineKeys of LMRequirements
 	# can be measured by the Measurement Variants of Route1.
-	(LMCoverageOfRoutePerSegment, LMCoverageOfRoutePerLineKey) = \
-		GetLMCoverageOfRoute(Route1, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
+	# (LMCoverageOfRoutePerSegment, LMCoverageOfRoutePerLineKey) = \
+	# 	GetLMCoverageOfRoute(Route1, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
 
 	# PeriodBegin (first day of month), PeriodEnd (last day of month), 
 	# ReqLineMeasureTime (required time in minutes for measuring a line)
@@ -434,16 +434,14 @@ if __name__ == '__main__':
 
 	# display LM Coverage of Route per Segment & LineKey
 
-	print "\nLMCoverageOfRoutePerSegment:"
-	PrintDictionaryContent(LMCoverageOfRoutePerSegment)
+	# print "\nLMCoverageOfRoutePerSegment:"
+	# PrintDictionaryContent(LMCoverageOfRoutePerSegment)
 
 	# Line Measurement (LM) Coverage of a Route: What a route can measure
 	# (with all its varians) in terms of LineKeys (Line, TimeWindow, WeekdayGroup)
 
-	print "\nLine Measurement (LM) Coverage of Route1 per LineKey"
-	PrintDictionaryContent(LMCoverageOfRoutePerLineKey)
-
-
+	# print "\nLine Measurement (LM) Coverage of Route1 per LineKey"
+	# PrintDictionaryContent(LMCoverageOfRoutePerLineKey)
 
 	# the LM Coverage of many routes can be added up
 	# with the function AddDicValues() to obtain
