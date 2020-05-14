@@ -24,11 +24,14 @@ from datetime import timedelta
 from openpyxl import Workbook
 import calendar
 import itertools as it 
+
 import openpyxl
 import xlrd
 from matplotlib import pyplot as plt
 import gurobipy as gp
 from gurobipy import GRB
+from pandas import *
+import numpy as np
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
@@ -69,7 +72,7 @@ RouteConditions1 = {
 	
 	# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
 	# determines earliest and latest arrival to end station
-	Cond.StartTimeAndDuration: (8, 0, 60, 120),		
+	Cond.StartTimeAndDuration: (8, 0, 30, 300),		
 	
 	# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
 	Cond.MaxWaitingTimeAtStation: (30,),			
@@ -166,25 +169,25 @@ def TEST_FindAndDisplayRoutes(Requirements):
 		# save variable to file
 		#SaveVariableToFile(RouteInfoList1, PlanYear, PlanMonth, 'RouteInfoList1', directory=VariableDirectory)
 
-	N = 10
+	# N = 10
 
-	print "\nDisplay first %s routes in RouteInfoList1" % N
-	ctr = 0
-	for RouteInfo in RouteInfoList1:
-		ctr += 1 
-		if ctr > N: break
+	# print "\nDisplay first %s routes in RouteInfoList1" % N
+	# ctr = 0
+	# for RouteInfo in RouteInfoList1:
+	# 	ctr += 1 
+	# 	if ctr > N: break
 		
-		print "\nRoute-" + str(ctr)
+	# 	print "\nRoute-" + str(ctr)
 
-		# print raw RouteInfo
-		print "\nRaw RouteInfo:"
-		for conn in RouteInfo:
-			conn = list(conn)
-			conn[ConnInfoInd['trafficdays_hexcode']] = '-'
-			print tuple(conn)
+	# 	# print raw RouteInfo
+	# 	print "\nRaw RouteInfo:"
+	# 	for conn in RouteInfo:
+	# 		conn = list(conn)
+	# 		conn[ConnInfoInd['trafficdays_hexcode']] = '-'
+	# 		print tuple(conn)
 
-		print "\nRouteInfo:"
-		print PrettyStringRouteInfo(RouteInfo)
+	# 	print "\nRouteInfo:"
+	# 	print PrettyStringRouteInfo(RouteInfo)
 
 	return RouteInfoList1
 
@@ -428,8 +431,10 @@ if __name__ == '__main__':
 				requirement_clusters[int(cluster_number)][key]=value
 
 	for i in range(5):
-
+		print 
+		print "CLUSTER"+str(i)
 		FoundRoutes=TEST_FindAndDisplayRoutes(requirement_clusters[i])
+		
 		AllRoutes.extend(FoundRoutes)
 
 	print LineSeparator
@@ -949,78 +954,74 @@ if __name__ == '__main__':
 
 	#LP Model Start
 
-	# workbook = xlrd.open_workbook(r"C:/Users/admin/Downloads/RouteDuration.xlsx")
+	workbook = xlrd.open_workbook(r"C:/Users/Muhammed Karakurt/Desktop/IE 492 Final Project/Codes/IE492/RouteDuration.xlsx")
 
-	# sheet = workbook.sheet_by_index(0)
+	sheet = workbook.sheet_by_index(0)
 
-	# RouteNumber = sheet.col_values(0, 1)
-	# Duration = sheet.col_values(1, 1)
+	RouteNumber = sheet.col_values(0, 0)
+	Duration = sheet.col_values(1, 0)
 
-	# RouteCosts = {a : b for a, b in zip(RouteNumber, Duration)}
+	RouteCosts = {a : b for a, b in zip(RouteNumber, Duration)}
 
-	# workbook2 = xlrd.open_workbook(r"C:/Users/admin/Downloads/CoverReqforLP.xlsx")
+	workbook2 = xlrd.open_workbook(r"C:/Users/Muhammed Karakurt/Desktop/IE 492 Final Project/Codes/IE492/CoverReqforLP.xlsx")
 
-	# sheet = workbook2.sheet_by_index(0)
+	sheet = workbook2.sheet_by_index(0)
 
-	# Req = sheet.col_values(0, 1)
-	# Value = sheet.col_values(1, 1)
+	Req = sheet.col_values(0, 0)
+	Value = sheet.col_values(1, 0)
 
-	# CoverReqforLP = {a : b for a, b in zip(Req, Value)}
+	CoverReqforLP = {a : b for a, b in zip(Req, Value)}
 
-	# #Getting 3 individual lists from the columns
-	# #A next step (merging repeated routes into a nested dictionary) is still required
+	#Getting 3 individual lists from the columns
+	#A next step (merging repeated routes into a nested dictionary) is still required
 
-	# workbook3 = xlrd.open_workbook(r"C:/Users/admin/Downloads/CoverPerRoute.xlsx")
+	workbook3 = xlrd.open_workbook(r"C:/Users/Muhammed Karakurt/Desktop/IE 492 Final Project/Codes/IE492/CoverPerRoute.xlsx")
 
-	# sheet = workbook3.sheet_by_index(0)
+	sheet = workbook3.sheet_by_index(0)
 
-	# Route_Number = sheet.col_values(0, 0)
-	# Reqs = sheet.col_values(1, 0)
-	# Values = sheet.col_values(2, 0)
+	Route_Number = sheet.col_values(0, 0)
+	Reqs = sheet.col_values(1, 0)
+	Values = sheet.col_values(2, 0)
 
-	# Routes = {}
+	Routes = {}
 
-	# for i in range(len(Route_Number)):
-		
-	# 	if Route_Number[i] not in Routes : 
-	# 		Routes[Route_Number[i]]={}
-			
-	# 	Routes[Route_Number[i]][Reqs[i]]=Values[i]
+	for i in range(len(Route_Number)):
 
-	# for j in RouteCosts:
-	# 	for i in eval(j):
-	# 		print(i)
-	
+			if Route_Number[i] not in Routes : 
+				Routes[Route_Number[i]]={}
 
-	# model = gp.Model("mipl")
+			Routes[Route_Number[i]][Reqs[i]]=Values[i]
 
-	# route_line_param ={}
-	# for route_name in RouteNames:
-	# 	for lines in CoverReqforLP:
-	# 		if lines in eval(route_name):
-	# 			route_line_param[route_name,lines]=1
-	# 		else:
-	# 			route_line_param[route_name,lines]=0
-	
-	# for route in RouteNames:
-	# 	for lines in CoverReqforLP:
-	# 		print(route_line_param[route,lines])
-	
-	# #Create Decision Variables
-	# selected_routes = model.addVars(RouteNames, lb=0,vtype=GRB.INTEGER,name="open")
-	# model.update()
-	
-	# #Objective Function (belki quicksum daha iyi gurobide)
-	# model.setObjective(sum(CoverReqforLP[j]*150 for j in CoverReqforLP) - sum(1*RouteCosts[i]*selected_routes[i] for i in RouteCosts), GRB.MAXIMIZE)
+	#Gurobi Start
 
-	# #Add Constraints
-	# for lines in CoverReqforLP:
-	# 	model.addConstr(sum(selected_routes[route]*route_line_param[route,lines] for route in RouteNames)>=CoverReqforLP[lines])
+	model = gp.Model("mipl")
 
-	# model.update()
-	# model.optimize()
+	route_line_param ={}
 
-	# for v in model.getVars():
-	# 	print('%s %g' % (v.varName, v.x))
-	
-	# print('Obj: %g' % model.objVal)
+	for route_name in Routes:
+
+		for lines in CoverReqforLP.keys():
+
+			if lines in Routes[route_name]:
+				route_line_param[route_name,lines]=1
+			else:
+				route_line_param[route_name,lines]=0
+
+	#Create Decision Variables
+	selected_routes = model.addVars(Routes.keys(), lb=0,vtype=GRB.INTEGER,name="open")
+	model.update()
+
+	#Objective Function (belki quicksum daha iyi gurobide)
+	model.setObjective(sum(CoverReqforLP[j]*150 for j in CoverReqforLP) - sum(1*RouteCosts[i]*selected_routes[i] for i in RouteCosts), GRB.MAXIMIZE)
+
+	#Add Constraints
+	for lines in CoverReqforLP:
+		model.addConstr(sum(selected_routes[route]*route_line_param[route,lines] for route in Routes.keys())>=CoverReqforLP[lines])
+
+	model.update()
+	model.optimize()
+
+	for v in model.getVars():
+		print('%s %g' % (v.varName, v.x))
+
+	print('Obj: %g' % model.objVal)
