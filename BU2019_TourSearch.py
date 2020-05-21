@@ -1092,15 +1092,15 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 	RequirementScores['conn_id']=conn_id
 	RequirementScores=RequirementScores.set_index('conn_id',drop=True)
 	
-	def ConnectionScoring(StationList,level,CoveredStations):
+	def ConnectionScoring(StationList,CoveredStations):
 		#StationList: Stations of lines which we want to cover (trial is used as an example)
 		#level= neighborhood level of all other connections
 		# CoveredStations = Set of so far Covered stations
-
 		global RequirementScores
+		global EarliestArrival
 
 		if CoveredStations == DistinctStations:
-			return #Returns final(with final connection scores) RequirementScores
+			return #Returns final(with final connection scores) TimeTableList
 
 		if len(CoveredStations) is 0:
 			CoveredStations=CoveredStations.union(StationList) 
@@ -1118,29 +1118,42 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 					if connection_row[ConnInfoInd['station_to']] not in CoveredStations:
 						Intersection.add(connection_row[ConnInfoInd['station_to']])
 
-					if (RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]==None) or (RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]>level):
-						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=level
+					if (
+						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]==None  or 
+						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]> EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]]+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
+						):
+						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]]+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
+					
+					if EarliestArrival.at[0,connection_row[ConnInfoInd['station_to']]] > EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]:
+						EarliestArrival.at[0,connection_row[ConnInfoInd['station_to']]] = EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
 
-		level=level+1
-		ConnectionScoring(Intersection,level,CoveredStations)
+		ConnectionScoring(Intersection,CoveredStations)
+
 	
 	start_time1 = timeit.default_timer()
 	#Filling out the Requirements Score dataframe 
 	for requirement in RequirementsSet:
-		
+
 		Stations=StationListForLines[requirement]
 		Stations=list(Stations)
+		
+		global EarliestArrival
+		EarliestArrival=pd.DataFrame(np.full((1, len(DistinctStations)), np.inf),columns=list(DistinctStations))
+
+		#Setting the earliest arrival to "0" for requirement line's stations
+		EarliestArrival.loc[:,Stations]=0
+
 		#Setting the connection score to "0" for requirement line's connections
 		for connection_row in TimeTableList:
 			if connection_row[ConnInfoInd['line_id']] == requirement:
 				RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=0
 
 		CoveredStations=set()
-		ConnectionScoring(Stations,1,CoveredStations)
+		ConnectionScoring(Stations,CoveredStations)
+
 	elapsed1 = timeit.default_timer() - start_time1
 	print 'initial reqscore takes %f ' %(elapsed1)
 
-	# kmeans = KMeans(n_clusters=3).fit(np.transpose(RequirementScores))
 	# wcss = []
 	# for i in range(1, 20):
 	# 	kmeans = KMeans(n_clusters=i, init='k-means++', max_iter=300, n_init=10, random_state=0)
@@ -1153,7 +1166,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 	# plt.ylabel('WCSS')
 	# plt.show()
 	
-	# ChosenNumberOfClusters=5
+	# ChosenNumberOfClusters=4
 
 	# kmeans=KMeans(n_clusters=ChosenNumberOfClusters, init='k-means++', max_iter=300, n_init=10, random_state=0)
 	# kmeans.fit(np.transpose(RequirementScores))
@@ -1232,7 +1245,9 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 			measured_lines=list(measured_lines)
 
 			start_time1 = timeit.default_timer()
-			RequirementScores.loc[:,measured_lines]=0
+			for lines in measured_lines:
+				if lines in list(RequirementScores.columns.values):
+					RequirementScores.loc[:,lines]=0
 			elapsed1 = timeit.default_timer() - start_time1
 			#print 'filling columns in reqscores %f' %(elapsed1)
 	

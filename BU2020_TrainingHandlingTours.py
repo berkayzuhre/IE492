@@ -23,10 +23,10 @@ from datetime import datetime
 from datetime import timedelta
 from openpyxl import Workbook
 import calendar
-import itertools as it 
+import itertools as it
+from collections import OrderedDict 
 
-import openpyxl
-import xlrd
+import csv
 from matplotlib import pyplot as plt
 import gurobipy as gp
 from gurobipy import GRB
@@ -94,10 +94,10 @@ RouteConditions1 = {
 	Cond.ReportDuringRouteSearch: (10,), 
 
 	# return routes found in x seconds
-	Cond.MaxSearchTimeInSeconds: (10,),
+	Cond.MaxSearchTimeInSeconds: (1800,),
 	}
 
-RelevantLineCategories = ['S']		# ['RE','R','IR','IC','ICE','S']
+#RelevantLineCategories = ['S']		# ['RE','R','IR','IC','ICE','S']
 
 # conditions for tour search
 # Bern --> Bern
@@ -415,13 +415,14 @@ if __name__ == '__main__':
 		('1.S3b',3,11):   2,
 		('8.RE1',3,11):   2,
 	}
-
+	
+	#TEST_FindAndDisplayRoutes(LMRequirementsAll)
+	
 	requirement_clusters={ 
 		0: { },
 		1: { },
 		2 :{ },
-		3 : { },
-		4 : { }
+		3 : { }
 	}
 
 	for index, row in clusters.iterrows():
@@ -430,12 +431,25 @@ if __name__ == '__main__':
 				cluster_number=row['cluster_number']
 				requirement_clusters[int(cluster_number)][key]=value
 
-	for i in range(5):
+	
+	for i in range(4):
 		print 
 		print "CLUSTER"+str(i)
 		FoundRoutes=TEST_FindAndDisplayRoutes(requirement_clusters[i])
-		
+		print "Requirements for Cluster"+str(i)
+		PrintDictionaryContent(requirement_clusters[i])
+		print 
+		print "Coverage for Cluster"+str(i)
+		LMCoverageTotal = {}
+		for RouteInfo in FoundRoutes:
+			(LMCoveragePerSegment, LMCoveragePerLineKey) = \
+				GetLMCoverageOfRoute(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
+			
+			LMCoverageTotal = AddDicValues(LMCoverageTotal, LMCoveragePerLineKey)
+		PrintDictionaryContent(LMCoverageTotal)
 		AllRoutes.extend(FoundRoutes)
+
+	#AllRoutes = list(OrderedDict.fromkeys(AllRoutes))
 
 	print LineSeparator
 	print "Evaluate tours"
@@ -664,6 +678,92 @@ if __name__ == '__main__':
 		('8.RE1',3,11):   2,
 	}
 
+	LMCoverageTotal = {}
+	RouteDuration={}
+	RouteInd=1
+	CoverPerRouteResults=[]
+
+	for RouteInfo in AllRoutes:
+		RouteName='Route' + str(RouteInd)
+		(LMCoveragePerSegment, LMCoveragePerLineKey) = \
+			GetLMCoverageOfRoute(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
+		
+		if len(LMCoveragePerLineKey)>0:
+
+			RouteInd = RouteInd+1
+			for key,value in LMCoveragePerLineKey.items():
+				# Put the key in the first column for each key in the dictionary
+				csv_row=[]
+				csv_row.append(RouteName)
+				csv_row.append(str(key))
+				csv_row.append(value)
+				CoverPerRouteResults.append(csv_row)
+			departure_first_station = RouteInfo[0][ConnInfoInd['departure_hour']]*60 + RouteInfo[0][ConnInfoInd['departure_min']]
+			arrival_last_station = RouteInfo[-1][ConnInfoInd['arrival_hour']]*60 + RouteInfo[-1][ConnInfoInd['arrival_min']]
+			routeDur=arrival_last_station-departure_first_station
+			RouteDuration[RouteName]=routeDur
+
+		LMCoverageTotal = AddDicValues(LMCoverageTotal, LMCoveragePerLineKey)
+	
+	print "\nLM Coverage of all routes in AllRoutes (#LineKeys: %s)" % len(LMCoverageTotal)
+	PrintDictionaryContent(LMCoverageTotal)
+
+	totalReq=0
+	totalCov=0
+
+	for var in LMRequirementsAll:
+		totalReq += LMRequirementsAll.get(var,"")
+
+	for var in LMRequirementsAll:
+
+		if LMCoverageTotal.get(var,"") == '':
+			continue
+
+		elif LMCoverageTotal.get(var,"") >= LMRequirementsAll.get(var,""):
+			totalCov += LMRequirementsAll.get(var,"")
+		
+		else:
+			totalCov += LMCoverageTotal.get(var,"")
+
+	print "Coverage Percentage : %s" % (float(totalCov) / float(totalReq) * 100)
+
+	CoverPerRouteResultFile = open("CoverPerRoute.csv",'wb')
+	CoverPerRouteResultFileWriter= csv.writer(CoverPerRouteResultFile,delimiter=',', dialect='excel')
+	CoverPerRouteResultFileWriter.writerows(CoverPerRouteResults)
+	CoverPerRouteResultFile.close()
+
+	RouteDurationResults=[]
+
+	for key,value in RouteDuration.items():
+		# Put the key in the first column for each key in the dictionary
+		csv_row=[]
+		csv_row.append(str(key))
+		csv_row.append(value)
+		RouteDurationResults.append(csv_row)
+	
+	RouteDurationResultsFile = open("RouteDuration.csv",'wb')
+	RouteDurationResultsFileWriter= csv.writer(RouteDurationResultsFile,delimiter=',', dialect='excel')
+	RouteDurationResultsFileWriter.writerows(RouteDurationResults)
+	RouteDurationResultsFile.close()
+
+	CoverReqForLPResults=[]
+	# CoverReqForLPResultsFile = open("CoverReqforLP.csv",'wb')
+	# CoverReqForLPResultsFileWriter= csv.writer(CoverReqForLPResultsFile,delimiter=',',quoting=csv.QUOTE_ALL)
+
+	for key,value in LMCoverageTotal.items():
+		# Put the key in the first column for each key in the dictionary
+		csv_row=[]
+		csv_row.append(str(key))
+		csv_row.append(LMRequirementsAll[key])
+		CoverReqForLPResults.append(csv_row)
+		#CoverReqForLPResultsFileWriter.writerow(csv_row)
+	
+	CoverReqForLPResultsFile = open("CoverReqforLP.csv",'wb')
+	CoverReqForLPResultsFileWriter= csv.writer(CoverReqForLPResultsFile,delimiter=',', dialect='excel')
+	CoverReqForLPResultsFileWriter.writerows(CoverReqForLPResults)
+	CoverReqForLPResultsFile.close()
+
+	print "asdasd"
 	# select a route in RouteInfoList1
 	#Route1 =  RouteInfoList1[-2]
 	
@@ -697,89 +797,13 @@ if __name__ == '__main__':
 	# for example, let's see, which LineKeys of LMRequirements
 	# can be covered by all routes of RouteInfoList1:
 	
-	LMCoverageTotal = {}
-	workbook = openpyxl.Workbook()
-	sheet = workbook.active
-	RouteInd=1
-	rowInd=1
-	RouteDuration={}
-	for RouteInfo in AllRoutes:
-		RouteName='Route' + str(RouteInd)
-		(LMCoveragePerSegment, LMCoveragePerLineKey) = \
-			GetLMCoverageOfRoute(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
-		if len(LMCoveragePerLineKey)>0:
-			RouteInd = RouteInd+1
-			row = rowInd
-			for key,value in LMCoveragePerLineKey.items():
-				# Put the key in the first column for each key in the dictionary
-				sheet.cell(row=row, column=1, value=RouteName)
-				sheet.cell(row=row, column=2, value=str(key))
-				sheet.cell(row=row, column=3, value=value)
-				row += 1
-			rowInd=rowInd+len(LMCoveragePerLineKey)
-			departure_first_station = RouteInfo[0][ConnInfoInd['departure_hour']]*60 + RouteInfo[0][ConnInfoInd['departure_min']]
-			arrival_last_station = RouteInfo[-1][ConnInfoInd['arrival_hour']]*60 + RouteInfo[-1][ConnInfoInd['arrival_min']]
-			routeDur=arrival_last_station-departure_first_station
-			RouteDuration[RouteName]=routeDur
-
-		LMCoverageTotal = AddDicValues(LMCoverageTotal, LMCoveragePerLineKey)
-
-	print "\nLM Coverage of all routes in RouteInfoList1 (#LineKeys: %s)" % len(LMCoverageTotal)
-	PrintDictionaryContent(LMCoverageTotal)
-
-	workbook.save(filename="CoverPerRoute.xlsx")
-	
-	workbook2 = openpyxl.Workbook()
-	sheet = workbook2.active
-	row=1
-	for key,value in RouteDuration.items():
-		# Put the key in the first column for each key in the dictionary
-		sheet.cell(row=row, column=1, value=str(key))
-		sheet.cell(row=row, column=2, value=value)
-		row +=1
-	workbook2.save(filename="RouteDuration.xlsx")
-
-	workbook = openpyxl.Workbook()
-	sheet = workbook.active
-
-	# openpyxl does things based on 1 instead of 0
-	row = 1
-	for key,value in LMCoverageTotal.items():
-		# Put the key in the first column for each key in the dictionary
-		sheet.cell(row=row, column=1, value=str(key))
-		column = 2
-		# Put the element in each adjacent column for each element in the tuple
-		sheet.cell(row=row, column=column, value=LMRequirementsAll[key])
-		row += 1
-
-	workbook.save(filename="CoverReqforLP.xlsx")
-
-	totalReq=0
-	totalCov=0
-
-	for var in LMRequirementsAll:
-		totalReq += LMRequirementsAll.get(var,"")
-
-	for var in LMRequirementsAll:
-
-		if LMCoverageTotal.get(var,"") == '':
-			continue
-
-		elif LMCoverageTotal.get(var,"") >= LMRequirementsAll.get(var,""):
-			totalCov += LMRequirementsAll.get(var,"")
-		
-		else:
-			totalCov += LMCoverageTotal.get(var,"")
-
-	print "Coverage Percentage : %s" % (float(totalCov) / float(totalReq) * 100)
-
 	# **************************************************************************************
 	# Travel Segments
 	# **************************************************************************************
 
-	print LineSeparator 
-	print "Travel Segments of a Route"
-	print LineSeparator
+	#print LineSeparator 
+	#print "Travel Segments of a Route"
+	#print LineSeparator
 
 	# Travel segments are defined by real change points:
 	# A travel segment is a continuous trip without a line change.
@@ -811,9 +835,9 @@ if __name__ == '__main__':
 	# Route Segments
 	# **************************************************************************************
 
-	print LineSeparator 
-	print "Route Segments of a Route"
-	print LineSeparator
+	# print LineSeparator 
+	# print "Route Segments of a Route"
+	# print LineSeparator
 
 	# Unlike travel segments, route segments can have virtual change points 
 	# for LineID and time window changes within the same continuous trip. 
@@ -874,58 +898,58 @@ if __name__ == '__main__':
 	# 		and what is the monetary revenue from these line & station measurements
 	# 2) what is the duration cost of a route
 
-	print LineSeparator 
-	print "Valuation and Sorting of Routes"
-	print LineSeparator
+	# print LineSeparator 
+	# print "Valuation and Sorting of Routes"
+	# print LineSeparator
 
-	# There can be multiple valuation functions for routes. One of them is PlanEinsatz.GetSimpleLMRouteValue()
+	# # There can be multiple valuation functions for routes. One of them is PlanEinsatz.GetSimpleLMRouteValue()
 
-	N = 10
-	print "\nGet the value of first %s routes in RouteInfoList1 (Valuation Func = GetSimpleLMRouteValue)" % N 
+	# N = 10
+	# print "\nGet the value of first %s routes in RouteInfoList1 (Valuation Func = GetSimpleLMRouteValue)" % N 
 
-	RouteCounter = 0
-	for RouteInfo in AllRoutes:
-		RouteCounter += 1 
+	# RouteCounter = 0
+	# for RouteInfo in AllRoutes:
+	# 	RouteCounter += 1 
 		
-		RouteValue = GetSimpleLMRouteValue(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirementsAll, 
-			RevenueLineMeasure, TripCostPerTimeInterval)
-		print "Value of Route-%s: %s" % (RouteCounter, RouteValue)
+	# 	RouteValue = GetSimpleLMRouteValue(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirementsAll, 
+	# 		RevenueLineMeasure, TripCostPerTimeInterval)
+	# 	print "Value of Route-%s: %s" % (RouteCounter, RouteValue)
 		
-		if RouteCounter == N:
-			break
+	# 	if RouteCounter == N:
+	# 		break
 
-	# Sort Tours:
-	# sort all the routes in RouteInfoList1 after their values, in descending order
+	# # Sort Tours:
+	# # sort all the routes in RouteInfoList1 after their values, in descending order
 
-	# select valuation function for sorting
-	RouteValueFunc = GetSimpleLMRouteValue
+	# # select valuation function for sorting
+	# RouteValueFunc = GetSimpleLMRouteValue
 
-	# Parameters is a tuple containing all input variables required for the valuation function
-	ValueFuncParameters = (ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirementsAll, 
-		RevenueLineMeasure, TripCostPerTimeInterval)
+	# # Parameters is a tuple containing all input variables required for the valuation function
+	# ValueFuncParameters = (ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirementsAll, 
+	# 	RevenueLineMeasure, TripCostPerTimeInterval)
 
-	# Note that you can pass any valuation function to the following sorting function.
-	SortedRouteInfoList = SortRoutesAfterValueInDescOrder(AllRoutes, RouteValueFunc, ValueFuncParameters)
+	# # Note that you can pass any valuation function to the following sorting function.
+	# SortedRouteInfoList = SortRoutesAfterValueInDescOrder(AllRoutes, RouteValueFunc, ValueFuncParameters)
 
-	N = 10
-	print "\nGet the value of first %s routes in SortedRouteInfoList (Valuation Func = GetRouteValue)" % N 
+	# N = 10
+	# print "\nGet the value of first %s routes in SortedRouteInfoList (Valuation Func = GetRouteValue)" % N 
 
-	RouteCounter = 0
-	for RouteInfo in SortedRouteInfoList:
-		RouteCounter += 1 
+	# RouteCounter = 0
+	# for RouteInfo in SortedRouteInfoList:
+	# 	RouteCounter += 1 
 		
-		# alternative valuation function
-		# RouteValue = GetRouteValue(RouteInfo, TimeWindows, ReqLineMeasureTime, StationMeasureTime_AQ, StationMeasureTime_KI, {}, 
-		#	MinTimeIntvForStationMeasurements, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll, RailCountPerStation=None, LineToReqBundle=None)
+	# 	# alternative valuation function
+	# 	# RouteValue = GetRouteValue(RouteInfo, TimeWindows, ReqLineMeasureTime, StationMeasureTime_AQ, StationMeasureTime_KI, {}, 
+	# 	#	MinTimeIntvForStationMeasurements, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll, RailCountPerStation=None, LineToReqBundle=None)
 		
-		RouteValue = RouteValueFunc(RouteInfo, *ValueFuncParameters)
+	# 	RouteValue = RouteValueFunc(RouteInfo, *ValueFuncParameters)
 
-		print "\nValue of Route-%s: %s" % (RouteCounter, RouteValue)
+	# 	print "\nValue of Route-%s: %s" % (RouteCounter, RouteValue)
 
-		print PrettyStringRouteInfo(RouteInfo)
+	# 	print PrettyStringRouteInfo(RouteInfo)
 		
-		if RouteCounter == N:
-			break
+	# 	if RouteCounter == N:
+	# 		break
 
 	# **************************************************************************************
 	# Availability of Routes
@@ -953,48 +977,43 @@ if __name__ == '__main__':
 	# 	print "Date: %s - Weekday: %s" % (ConvertDateOrdinalToDateString(DayOrd), GetWeekdayOfDate(DayOrd))
 
 	#LP Model Start
+	reader1 = csv.reader(open('RouteDuration.csv', 'r'))
+	RouteCosts = {}
+	for row in reader1:
+		k, v = row
+		RouteCosts[k] = v
+	
+	reader2 = csv.reader(open('CoverReqforLP.csv', 'r'))
+	CoverReqforLPstr = {}
+	for row in reader2:
+		k, v = row
+		CoverReqforLPstr[k] = v
 
-	workbook = xlrd.open_workbook(r"C:/Users/Muhammed Karakurt/Desktop/IE 492 Final Project/Codes/IE492/RouteDuration.xlsx")
-
-	sheet = workbook.sheet_by_index(0)
-
-	RouteNumber = sheet.col_values(0, 0)
-	Duration = sheet.col_values(1, 0)
-
-	RouteCosts = {a : b for a, b in zip(RouteNumber, Duration)}
-
-	workbook2 = xlrd.open_workbook(r"C:/Users/Muhammed Karakurt/Desktop/IE 492 Final Project/Codes/IE492/CoverReqforLP.xlsx")
-
-	sheet = workbook2.sheet_by_index(0)
-
-	Req = sheet.col_values(0, 0)
-	Value = sheet.col_values(1, 0)
-
-	CoverReqforLP = {a : b for a, b in zip(Req, Value)}
-
-	#Getting 3 individual lists from the columns
-	#A next step (merging repeated routes into a nested dictionary) is still required
-
-	workbook3 = xlrd.open_workbook(r"C:/Users/Muhammed Karakurt/Desktop/IE 492 Final Project/Codes/IE492/CoverPerRoute.xlsx")
-
-	sheet = workbook3.sheet_by_index(0)
-
-	Route_Number = sheet.col_values(0, 0)
-	Reqs = sheet.col_values(1, 0)
-	Values = sheet.col_values(2, 0)
+	reader3= csv.reader(open('CoverPerRoute.csv', 'r'))
+	Route_Number = []
+	Reqs = []
+	Values = []
+	
+	for row in reader3:
+		k, v, l = row
+		Route_Number.append(k)
+		Reqs.append(v)
+		Values.append(l)
 
 	Routes = {}
 
 	for i in range(len(Route_Number)):
 
-			if Route_Number[i] not in Routes : 
-				Routes[Route_Number[i]]={}
+		if Route_Number[i] not in Routes : 
+			Routes[Route_Number[i]]={}
 
-			Routes[Route_Number[i]][Reqs[i]]=Values[i]
+		Routes[Route_Number[i]][Reqs[i]]=Values[i]
 
 	#Gurobi Start
 
 	model = gp.Model("mipl")
+
+	CoverReqforLP = dict((k,int(v)) for k,v in CoverReqforLPstr.iteritems())
 
 	route_line_param ={}
 
@@ -1021,7 +1040,7 @@ if __name__ == '__main__':
 	model.update()
 	model.optimize()
 
-	for v in model.getVars():
-		print('%s %g' % (v.varName, v.x))
+	# for v in model.getVars():
+	# 	print('%s %g' % (v.varName, v.x))
 
 	print('Obj: %g' % model.objVal)
