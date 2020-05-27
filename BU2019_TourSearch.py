@@ -154,6 +154,12 @@ class Cond:
 		Example: Cond.ConnectionsAreAvailableOnAllListedDays: (DayOrdList,)
 		"""
 
+	ReturnFromCurrentStation = 13
+	ReturnFromCurrentStation_explain= """
+		Checks if we can return to our starting point from current station in the tour.
+		No parameter is required.
+		"""
+
 	StartAndEndStations = 17
 	StartAndEndStations_explain = """
 		Set start and end stations of the route.
@@ -363,7 +369,7 @@ class Cond:
 		return ' AND '.join(SQLconditions)
 
 	@classmethod
-	def CheckIfConnectionShouldBeSelected(cls, ConnectionInfo, PathInfo, EndStation, RouteConditions):
+	def CheckIfConnectionShouldBeSelected(cls, ConnectionInfo, PathInfo, EndStation, RouteConditions,EarliestArrival_StationScoring):
 		"""
 		Determine whether the given connection should be selected 
 		according to the conditions defined in dictionary RouteConditions.
@@ -544,6 +550,15 @@ class Cond:
 					if IfTest: print "--------- VisitStations violated ---------"
 					return False
 
+		#ReturnFromCurrentStation
+		if RouteConditions.has_key(cls.ReturnFromCurrentStation):
+			cond=cls.ReturnFromCurrentStation
+			IfReturnFromCurrentStation = RouteConditions[cond]
+			if IfReturnFromCurrentStation and not CheckIfReturnIsPossibleFromCurrentStation(ConnectionInfo, PathInfo,RouteConditions,EarliestArrival_StationScoring):
+				IncrementDicValue(cls.TerminationReasonsDic, 'ReturnFromCurrentStation')
+				if IfTest: print "--------- ReturnFromCurrentStation violated ---------"
+				return False
+
 		# NoLineChangeAtVirtualStations like 138 (tunnel station)
 		# don't permit line changes at virtual stations like 138
 		if True:
@@ -555,7 +570,7 @@ class Cond:
 				if haltestelle_ab < 1000 and fahrt_id_last != fahrt_id_next:
 					return False
 
-		
+
 		# passed all conditions
 		# Path is terminated successfuly if NextStation = EndStation
 		if CheckIfPathTerminatesSuccessfully(ConnectionInfo, PathInfo, RouteConditions, EndStation):
@@ -974,7 +989,7 @@ LMRequirementsAll = {
 		('8.RE1',3,11):   2,
 }
 
-def FindAllRoutes(dbcur, RouteConditions,Requirements):
+def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,EarliestArrival_StationScoring):
 	"""
 	Find all possible routes (w.r.t. time table) from start to end station 
     according to all conditions given in RouteConditions. 
@@ -1017,7 +1032,6 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 			ConnectionInfo[ConnInfoInd['arrival_hour']] = PathBeginTimeHour
 		elif key == 'arrival_min':
 			ConnectionInfo[ConnInfoInd['arrival_min']] = PathBeginTimeMin	
-
 		else:
 			ConnectionInfo[ConnInfoInd[key]] = None
 	ConnectionInfo = tuple(ConnectionInfo)
@@ -1054,7 +1068,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 			GetCompleteStationChainInformation(dbcur, RouteConditions)
 			print "FINISHED reading station chain information from database, in %.2f seconds." % (time.time() - st)
 			print "TEST: SizeOf global variable global_StationChainInfoPerFahrtID in kilobytes: %d" % math.floor(sys.getsizeof(global_StationChainInfoPerFahrtID) / 2**10)
-
+	
 	#DistinctLineID and DistinctStation Set Generation
 	arr=np.array(TimeTableList)
 	DistinctStations=np.unique(arr[:,ConnInfoInd['station_from']])
@@ -1079,81 +1093,160 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 
 		StationListForLines[line] = StationList
 
-	#Initializing RequirementsScores data frame
+	#Initializing RequirementsScoresWithinCluster data frame within cluster
 	RequirementsSet=set(list(list(zip(*Requirements)[0])))
 	RequirementsSet=list(RequirementsSet)
+	RequirementScoresWithinCluster=RequirementScores.loc[:,RequirementsSet]
 
-	conn_id=[]
-	for rows in TimeTableList:
-		conn_id.append(rows[ConnInfoInd['conn_id']])
+	#print "asdas"
+	# conn_id=[]
+	# for rows in TimeTableList:
+	# 	conn_id.append(rows[ConnInfoInd['conn_id']])
 
-	global RequirementScores
-	RequirementScores = pd.DataFrame(np.full((len(TimeTableList),len(RequirementsSet)),None),columns=RequirementsSet)
-	RequirementScores['conn_id']=conn_id
-	RequirementScores=RequirementScores.set_index('conn_id',drop=True)
+	#Initializing connection scoring dataframe with respect to requirements
+	# global RequirementScores
+	# RequirementScores = pd.DataFrame(np.full((len(TimeTableList),len(RequirementsSet)),None),columns=RequirementsSet)
+	# RequirementScores['conn_id']=conn_id
+	# RequirementScores=RequirementScores.set_index('conn_id',drop=True)
+
+	#Initializing EarliestArrival to be used in connection scoring
 	
-	def ConnectionScoring(StationList,CoveredStations):
-		#StationList: Stations of lines which we want to cover (trial is used as an example)
-		#level= neighborhood level of all other connections
-		# CoveredStations = Set of so far Covered stations
-		global RequirementScores
-		global EarliestArrival
+	#EarliestArrival=pd.DataFrame(np.full((len(DistinctStations), len(DistinctStations)), 1000),columns=list(DistinctStations))
+	#EarliestArrival['StationFrom']=list(DistinctStations)
+	#EarliestArrival=EarliestArrival.set_index('StationFrom',drop=True)
+	
 
-		if CoveredStations == DistinctStations:
-			return #Returns final(with final connection scores) TimeTableList
+	#Initializing EarliestArrival_StationScoring data frame to be used as a criteria for turning back
+	#ScoredStations=set()
+	#global EarliestArrival_StationScoring
+	#EarliestArrival_StationScoring=pd.DataFrame(np.full((1, len(DistinctStations)), 0),columns=list(DistinctStations))
 
-		if len(CoveredStations) is 0:
-			CoveredStations=CoveredStations.union(StationList) 
-		else:
-			CoveredStations.update(StationList)
+	
+	# def StationScoring(StationList,ScoredStations,StartingStation):
+	# 	#StationList: Stations which we are scoring(starting station is given at the start)
 		
-		Intersection=set()
+	# 	if len(StationList) is 0:
+	# 		return
+		
+	# 	global EarliestArrival
 
-		for station in StationList:
+	# 	Start = next(iter(StartingStation))
 
-			for connection_row in TimeTableList:
+	# 	if StationList == StartingStation:
+	# 		EarliestArrival.at[Start,Start]=0
+		
+	# 	if ScoredStations == DistinctStations:
+	# 		return #Returns final EarliestArrival for specific station
+		
+	# 	if len(ScoredStations) is 0:
+	# 		ScoredStations=ScoredStations.union(StationList) 
+	# 	else:
+	# 		ScoredStations.update(StationList)
+		
+	# 	Intersection=set()
+
+	# 	for station in StationList:
+
+	# 		for connection_row in TimeTableList:
 				
-				if connection_row[ConnInfoInd['station_from']]==station:
+	# 			if connection_row[ConnInfoInd['station_from']]==station:
 
-					if connection_row[ConnInfoInd['station_to']] not in CoveredStations:
-						Intersection.add(connection_row[ConnInfoInd['station_to']])
+	# 				if connection_row[ConnInfoInd['station_to']] not in ScoredStations:
+	# 					Intersection.add(connection_row[ConnInfoInd['station_to']])
 
-					if (
-						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]==None  or 
-						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]> EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]]+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
-						):
-						RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]]+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
-					
-					if EarliestArrival.at[0,connection_row[ConnInfoInd['station_to']]] > EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]:
-						EarliestArrival.at[0,connection_row[ConnInfoInd['station_to']]] = EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
+	# 				if EarliestArrival.at[Start,connection_row[ConnInfoInd['station_to']]] > EarliestArrival.at[Start,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]:
+	# 					EarliestArrival.at[Start,connection_row[ConnInfoInd['station_to']]] = EarliestArrival.at[Start,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
 
-		ConnectionScoring(Intersection,CoveredStations)
+	# 	StationScoring(Intersection,ScoredStations,StartingStation)
 
-	
-	start_time1 = timeit.default_timer()
-	#Filling out the Requirements Score dataframe 
-	for requirement in RequirementsSet:
+	# def ConnectionScoring(StationList,CoveredStations):
+	# 	#StationList: Stations of lines which we want to cover (trial is used as an example)
+	# 	#level= neighborhood level of all other connections
+	# 	# CoveredStations = Set of so far Covered stations
+	# 	global RequirementScores
+	# 	global EarliestArrival
 
-		Stations=StationListForLines[requirement]
-		Stations=list(Stations)
+	# 	if CoveredStations == DistinctStations:
+	# 		return #Returns final(with final connection scores) TimeTableList
+
+	# 	if len(CoveredStations) is 0:
+	# 		CoveredStations=CoveredStations.union(StationList) 
+	# 	else:
+	# 		CoveredStations.update(StationList)
 		
-		global EarliestArrival
-		EarliestArrival=pd.DataFrame(np.full((1, len(DistinctStations)), np.inf),columns=list(DistinctStations))
+	# 	Intersection=set()
 
-		#Setting the earliest arrival to "0" for requirement line's stations
-		EarliestArrival.loc[:,Stations]=0
+	# 	for station in StationList:
 
-		#Setting the connection score to "0" for requirement line's connections
-		for connection_row in TimeTableList:
-			if connection_row[ConnInfoInd['line_id']] == requirement:
-				RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=0
+	# 		for connection_row in TimeTableList:
+				
+	# 			if connection_row[ConnInfoInd['station_from']]==station:
 
-		CoveredStations=set()
-		ConnectionScoring(Stations,CoveredStations)
+	# 				if connection_row[ConnInfoInd['station_to']] not in CoveredStations:
+	# 					Intersection.add(connection_row[ConnInfoInd['station_to']])
 
-	elapsed1 = timeit.default_timer() - start_time1
-	print 'initial reqscore takes %f ' %(elapsed1)
+	# 				if (
+	# 					RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]==None  or 
+	# 					RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]> EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]]+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
+	# 					):
+	# 					RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]]+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
+					
+	# 				if EarliestArrival.at[0,connection_row[ConnInfoInd['station_to']]] > EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]:
+	# 					EarliestArrival.at[0,connection_row[ConnInfoInd['station_to']]] = EarliestArrival.at[0,connection_row[ConnInfoInd['station_from']]] + connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
 
+	# 	ConnectionScoring(Intersection,CoveredStations)
+	
+	#start_time1 = timeit.default_timer()
+	#Filling out the EarliestArrival
+	# for station in DistinctStations:
+	# 	start_time2 = timeit.default_timer()
+	# 	ScoredStations=set()
+	# 	StationScoring({station},ScoredStations,{station})
+	# 	elapsed2 = timeit.default_timer() - start_time2
+	# 	print 'station %d earliest arrival takes %f ' %(station,elapsed2)
+	# elapsed1 = timeit.default_timer() - start_time1
+	# print 'filling out earliest arrival takes %f ' %(elapsed1)
+	#EarliestArrival.to_excel("earliest_arrival_allstations.xlsx")
+
+
+	# start_time1 = timeit.default_timer()
+	# #Filling out the Requirements Score dataframe 
+	# for requirement in RequirementsSet:
+	# 	start_time2 = timeit.default_timer()
+	# 	Stations=StationListForLines[requirement]
+	# 	Stations=list(Stations)
+	
+	# 	#Setting the earliest arrival to "0" for requirement line's stations
+	# 	#EarliestArrival.loc[:,Stations]=0
+
+	# 	#Setting the connection score to "0" for requirement line's connections
+	# 	for connection_row in TimeTableList:
+	# 		if connection_row[ConnInfoInd['line_id']] == requirement:
+	# 			RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=0
+	# 		else:
+	# 			RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=EarliestArrival.loc[connection_row[ConnInfoInd['station_to']],Stations].mean()-connection_row[ConnInfoInd['arrival_totalmin']]+connection_row[ConnInfoInd['departure_totalmin']]
+	# 	elapsed2 = timeit.default_timer() - start_time2
+	# 	print 'line %s reqscore takes %f ' %(requirement,elapsed2)
+	
+	# elapsed1 = timeit.default_timer() - start_time1
+	# print 'initial reqscore takes %f ' %(elapsed1)
+
+	# RequirementScores.to_excel("reqscores.xlsx")
+	# print "asda"
+	#Filling out the EarliestArrival_StationScoring
+
+	# for station in DistinctStations:
+	# 	start_time1 = timeit.default_timer()
+	# 	global EarliestArrivalSpecificStation
+	# 	EarliestArrivalSpecificStation=pd.DataFrame(np.full((1, len(DistinctStations)), 1e8),columns=list(DistinctStations))
+	# 	ScoredStations=set()
+	# 	StationScoring({station},ScoredStations,{station})
+	# 	EarliestArrival_StationScoring.at[0,station]=EarliestArrivalSpecificStation.at[0,StartStation]
+	# 	elapsed1 = timeit.default_timer() - start_time1
+	# 	print 'Station %f earliest arrival takes %f ' %(station,elapsed1)
+	
+	# EarliestArrival_StationScoring.to_excel("earliest_arrival.xlsx")
+	
 	# wcss = []
 	# for i in range(1, 20):
 	# 	kmeans = KMeans(n_clusters=i, init='k-means++', max_iter=300, n_init=10, random_state=0)
@@ -1195,7 +1288,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 
 	# find all possible paths
 	FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-		TimeTableList, TimeTableIndex,StationHourIndex,RequirementScores,RequirementsSet)
+		TimeTableList, TimeTableIndex,StationHourIndex,RequirementScoresWithinCluster,RequirementsSet,EarliestArrival_StationScoring)
 	PathInfoList = Cond.SelectedRoutes
 
 	# apply filter
@@ -1205,7 +1298,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements):
 	(StatusReport, TerminationReasons) = Cond.ResetClassVariables() 
 	return (RouteInfoList, StatusReport, TerminationReasons)
 
-def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores,RequirementsList,PathInfo=[]):
+def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex,RequirementScoresWithinCluster,RequirementsList,EarliestArrival_StationScoring,PathInfo=[]):
 	""" 
 	Find all possible routes (w.r.t. time table) from start to end station w.r.t.
 	all conditions given by the dictionary RouteConditions.
@@ -1228,27 +1321,27 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		return [PathInfo]
 	
 	RequiredLines=set(RequirementsList)
-	start_time = timeit.default_timer()
+	#start_time = timeit.default_timer()
 	
 	#Measurement Check
 	if CheckIfLastLineCanBeMeasured(PathInfo,RequiredLines,10):
-		(LMCoveragePerSegment, LMCoveragePerLineKey) = \
+		(_, LMCoveragePerLineKey) = \
 			GetLMCoverageOfRoute(PathInfo, 10, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
 		
 		if len(LMCoveragePerLineKey)!=0:
 
-			start_time1 = timeit.default_timer()
+			#start_time1 = timeit.default_timer()
 			measured_lines=set(list(list(zip(*LMCoveragePerLineKey)[0])))
-			elapsed1 = timeit.default_timer() - start_time1
+			#elapsed1 = timeit.default_timer() - start_time1
 			#print 'finding measured lines %f' %(elapsed1)
 
 			measured_lines=list(measured_lines)
 
-			start_time1 = timeit.default_timer()
+			#start_time1 = timeit.default_timer()
 			for lines in measured_lines:
-				if lines in list(RequirementScores.columns.values):
-					RequirementScores.loc[:,lines]=0
-			elapsed1 = timeit.default_timer() - start_time1
+				if lines in list(RequirementScoresWithinCluster.columns.values):
+					RequirementScoresWithinCluster.loc[:,lines]=None
+			#elapsed1 = timeit.default_timer() - start_time1
 			#print 'filling columns in reqscores %f' %(elapsed1)
 	
 	#elapsed = timeit.default_timer() - start_time
@@ -1303,13 +1396,13 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 	res=[]
 	
 	for ConnectionInfo in ConnectionInfoList:
-		res.append(Cond.CheckIfConnectionShouldBeSelected(ConnectionInfo, PathInfo, EndStation, RouteConditions))
+		res.append(Cond.CheckIfConnectionShouldBeSelected(ConnectionInfo, PathInfo, EndStation, RouteConditions,EarliestArrival_StationScoring))
 		
 		if res[-1] == None: return[]
 
 		if res[-1] == True:
 			connection_id=ConnectionInfo[ConnInfoInd['conn_id']]
-			res[-1]= RequirementScores.loc[connection_id].sum(skipna=True)
+			res[-1]= RequirementScoresWithinCluster[RequirementScoresWithinCluster!=None].min(1)[connection_id]
 		
 		else:
 
@@ -1328,7 +1421,7 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		
 		# recursive call
 		extended_paths = FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-			TimeTableList, TimeTableIndex, StationHourIndex,RequirementScores,RequirementsList, PathInfo)
+			TimeTableList, TimeTableIndex, StationHourIndex,RequirementScoresWithinCluster,RequirementsList, EarliestArrival_StationScoring,PathInfo)
 
 		# report status
 		if Cond.ReportDuringRouteSearch in RouteConditions:
@@ -3935,6 +4028,35 @@ def CheckIfLastLineCanBeMeasured(PathInfo,IncludedLines,RequiredMeasureTime):
 		return True
 	else:
 		return False
+
+
+def CheckIfReturnIsPossibleFromCurrentStation(ConnectionInfo,PathInfo,RouteConditions,EarliestArrival_StationScoring):
+	
+	arrival_first_station = PathInfo[0][ConnInfoInd['arrival_hour']]*60 + PathInfo[0][ConnInfoInd['arrival_min']]
+	arrival_last_station = PathInfo[-1][ConnInfoInd['arrival_hour']]*60 + PathInfo[-1][ConnInfoInd['arrival_min']]
+	TotalDuration = arrival_last_station - arrival_first_station
+	
+	if TotalDuration + EarliestArrival_StationScoring.at[0,ConnectionInfo[ConnInfoInd['station_to']]] < RouteConditions[Cond.StartTimeAndDuration][3] :
+		return True
+	else:
+		return False
+
+def GetTimeAndDurationOfPath(PathInfo):
+	"""
+	Get begin/end times, and total duration of path since arrival to first station (Depot).
+	"""
+	if not PathInfo:
+		return None 
+	if len(PathInfo) < 2: return None 
+
+	arrival_first_station = PathInfo[0][ConnInfoInd['arrival_hour']]*60 + PathInfo[0][ConnInfoInd['arrival_min']]
+	# departure_first_station = PathInfo[1][ConnInfoInd['departure_hour']]*60 + PathInfo[1][ConnInfoInd['departure_min']]
+
+	arrival_last_station = PathInfo[-1][ConnInfoInd['arrival_hour']]*60 + PathInfo[-1][ConnInfoInd['arrival_min']]
+	TotalDuration = arrival_last_station - arrival_first_station
+	return (TotalDuration, arrival_first_station, arrival_last_station)
+
+
 
 def CheckIfPathTerminatesSuccessfully(ConnectionInfo, PathInfo, RouteConditions, EndStation):
 
