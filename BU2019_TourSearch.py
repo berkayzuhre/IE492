@@ -989,7 +989,7 @@ LMRequirementsAll = {
 		('8.RE1',3,11):   2,
 }
 
-def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,EarliestArrival_StationScoring):
+def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,EarliestArrival):
 	"""
 	Find all possible routes (w.r.t. time table) from start to end station 
     according to all conditions given in RouteConditions. 
@@ -999,7 +999,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
     
     Return: PathInfoList (synonym for RouteInfoList)
 	"""
-	
+
 	if not RouteConditions:
 		return None
 
@@ -1093,10 +1093,17 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 
 		StationListForLines[line] = StationList
 
+	print "sadas"
 	#Initializing RequirementsScoresWithinCluster data frame within cluster
 	RequirementsSet=set(list(list(zip(*Requirements)[0])))
 	RequirementsSet=list(RequirementsSet)
 	RequirementScoresWithinCluster=RequirementScores.loc[:,RequirementsSet]
+
+	#Creating EarliestArrival_StationScoring data frame to be used as a criteria for turning back
+	EarliestArrival_StationScoring=pd.DataFrame(np.full((1, len(DistinctStations)), 0),columns=list(DistinctStations))
+
+	for station in DistinctStations:
+		EarliestArrival_StationScoring.at[0,station]=EarliestArrival.at[station,StartStation]
 
 	#print "asdas"
 	# conn_id=[]
@@ -1116,12 +1123,6 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	#EarliestArrival=EarliestArrival.set_index('StationFrom',drop=True)
 	
 
-	#Initializing EarliestArrival_StationScoring data frame to be used as a criteria for turning back
-	#ScoredStations=set()
-	#global EarliestArrival_StationScoring
-	#EarliestArrival_StationScoring=pd.DataFrame(np.full((1, len(DistinctStations)), 0),columns=list(DistinctStations))
-
-	
 	# def StationScoring(StationList,ScoredStations,StartingStation):
 	# 	#StationList: Stations which we are scoring(starting station is given at the start)
 		
@@ -1207,8 +1208,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# elapsed1 = timeit.default_timer() - start_time1
 	# print 'filling out earliest arrival takes %f ' %(elapsed1)
 	#EarliestArrival.to_excel("earliest_arrival_allstations.xlsx")
-
-
+	
 	# start_time1 = timeit.default_timer()
 	# #Filling out the Requirements Score dataframe 
 	# for requirement in RequirementsSet:
@@ -1224,7 +1224,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# 		if connection_row[ConnInfoInd['line_id']] == requirement:
 	# 			RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=0
 	# 		else:
-	# 			RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=EarliestArrival.loc[connection_row[ConnInfoInd['station_to']],Stations].mean()-connection_row[ConnInfoInd['arrival_totalmin']]+connection_row[ConnInfoInd['departure_totalmin']]
+	# 			RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=EarliestArrival.loc[connection_row[ConnInfoInd['station_to']],Stations].mean()+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
 	# 	elapsed2 = timeit.default_timer() - start_time2
 	# 	print 'line %s reqscore takes %f ' %(requirement,elapsed2)
 	
@@ -1244,6 +1244,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# 	EarliestArrival_StationScoring.at[0,station]=EarliestArrivalSpecificStation.at[0,StartStation]
 	# 	elapsed1 = timeit.default_timer() - start_time1
 	# 	print 'Station %f earliest arrival takes %f ' %(station,elapsed1)
+	
 	
 	# EarliestArrival_StationScoring.to_excel("earliest_arrival.xlsx")
 	
@@ -1273,15 +1274,6 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	
 	# workbook.save(filename="clusters.xlsx")
 
-	# #Changing the TimeTable List
-	# for connection_row in TimeTableList:
-	# 	ind=TimeTableList.index(connection_row)
-	# 	connection_row=list(connection_row)
-	# 	conn_id=connection_row[ConnInfoInd['conn_id']]
-	# 	connection_row[ConnInfoInd['connection_score']]=RequirementScores.loc[conn_id].sum(skipna=True)
-	# 	connection_row=tuple(connection_row)
-	# 	TimeTableList[ind]=connection_row 
-
 	# a=[StationListForLines[key] for key in list(list(zip(*LMRequirementsAll)[0]))]
 	# a=set().union(*a)
 	# ConnectionScoring(a,1)
@@ -1289,6 +1281,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# find all possible paths
 	FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
 		TimeTableList, TimeTableIndex,StationHourIndex,RequirementScoresWithinCluster,RequirementsSet,EarliestArrival_StationScoring)
+	
 	PathInfoList = Cond.SelectedRoutes
 
 	# apply filter
@@ -1303,7 +1296,7 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 	Find all possible routes (w.r.t. time table) from start to end station w.r.t.
 	all conditions given by the dictionary RouteConditions.
 	"""
-	
+
 	PathInfo = PathInfo + [ConnectionInfo]
 
 	if Cond.IfTestRouteSearch:

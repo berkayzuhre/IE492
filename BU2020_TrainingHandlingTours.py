@@ -66,7 +66,7 @@ RouteInfoList1 = None
 
 # conditions for tour search
 # Bern --> Zürich
-RouteConditions1 = {
+RouteConditions1_30_300 = {
 	# von und bis Haltestelle (mandatory condition)
 	Cond.StartAndEndStations: (8503000, 8503000), 	
 	
@@ -75,7 +75,7 @@ RouteConditions1 = {
 	Cond.StartTimeAndDuration: (8, 0, 30, 300),		
 	
 	# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
-	Cond.MaxWaitingTimeAtStation: (30,),			
+	Cond.MaxWaitingTimeAtStation: (25,),			
 	
 	# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
 	Cond.TimeForLineChange: (2,),
@@ -94,7 +94,7 @@ RouteConditions1 = {
 	Cond.ReportDuringRouteSearch: (10,), 
 
 	# return routes found in x seconds
-	Cond.MaxSearchTimeInSeconds: (7200,),
+	Cond.MaxSearchTimeInSeconds: (30,),
 
 	Cond.ReturnFromCurrentStation: True,
 
@@ -109,7 +109,7 @@ def TEST_ReadTimeTable():
 	for line in TimeTableList:
 		print line
 
-def TEST_FindAndDisplayRoutes(Requirements,EarliestArrival_StationScoring):
+def TEST_FindAndDisplayRoutes(Requirements,RequirementScores,EarliestArrival,RouteConditions):
 	"""
 	if Read_RouteInfoList_FromFile = True AND a saved variable exists --> read tours from saved variable
 	Otherwise, search tours and save results (i.e. list of tours, RouteInfoList1)
@@ -117,12 +117,9 @@ def TEST_FindAndDisplayRoutes(Requirements,EarliestArrival_StationScoring):
 	global RouteInfoList1
 	print "\nFind all routes for the given route conditions..."
 
-	# search conditions to be used
-	RouteConditions = RouteConditions1
-
 	if not Read_RouteInfoList_FromFile or not RouteInfoList1:
 		print "\nFind routes for the given route conditions..."
-		(RouteInfoList1, StatusReport, TerminationReasons) = FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,EarliestArrival_StationScoring)
+		(RouteInfoList1, StatusReport, TerminationReasons) = FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,EarliestArrival)
 		print 
 		print "StatusReport: " + str(StatusReport)
 		print "TerminationReasons: " + str(TerminationReasons)
@@ -165,8 +162,6 @@ if __name__ == '__main__':
 	global AllRoutes
 	AllRoutes=[]
 	
-	clusters=pd.read_excel('clusters.xlsx',header=None,names=["line","cluster_number"])
-
 	LMRequirementsAll = {
 		('6.S10',2,11):   2,
 		('4.S6b',2,11):   2,
@@ -378,12 +373,22 @@ if __name__ == '__main__':
 		('8.RE1',3,11):   2,
 	}
 	
+	st = time.time()
+	print "Reading Excel Files"
+
+	clusters=pd.read_excel('clusters.xlsx',header=None,names=["line","cluster_number"])
+
 	RequirementScores=pd.read_excel("reqscores.xlsx",index_col='conn_id')
 
 	EarliestArrival=pd.read_excel("earliest_arrival_allstations.xlsx",index_col='StationFrom')
 
-	EarliestArrival_StationScoring=pd.read_excel("earliest_arrival.xlsx")
-
+	print "Finished Reading Excel Files in %s seconds" %(time.time() - st)
+	
+	print LineSeparator
+	
+	st = time.time()
+	print 
+	print "Starting to create requirement Clusters"
 	requirement_clusters={ 
 		0: { },
 		1: { },
@@ -397,10 +402,54 @@ if __name__ == '__main__':
 				cluster_number=row['cluster_number']
 				requirement_clusters[int(cluster_number)][key]=value
 
+	print "Finished creating requirement Clusters in %s" %(time.time() - st)
+
+	#TEST_FindAndDisplayRoutes(LMRequirementsAll,RequirementScores,EarliestArrival)
+	
+	StartingStationsList=[8501120,8503000,8507000,8505213]
+	
 	for i in range(4):
-		print 
+		print LineSeparator
 		print "CLUSTER"+str(i)
-		FoundRoutes=TEST_FindAndDisplayRoutes(requirement_clusters[i],EarliestArrival_StationScoring)
+		
+		#Finding Appropriate Starting Station(might need to find the optimal starting station for each cluster)
+		
+		StartingStation=StartingStationsList[i]
+
+		RouteConditions = {
+			# von und bis Haltestelle (mandatory condition)
+			Cond.StartAndEndStations: (StartingStation, StartingStation), 	
+			
+			# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
+			# determines earliest and latest arrival to end station
+			Cond.StartTimeAndDuration: (8, 0, 30, 300),		
+			
+			# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
+			Cond.MaxWaitingTimeAtStation: (25,),			
+			
+			# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
+			Cond.TimeForLineChange: (2,),
+
+			# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
+			Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
+
+			# connection availability on given days
+			Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
+
+			# select/filter only earliest arrival routes 
+			#True: minimum number of line changes as primary selection criterion
+			# Cond.SearchRoutesForEarliestArrival: (False,),
+
+			# Parameter: Reporting frequency in seconds
+			Cond.ReportDuringRouteSearch: (10,), 
+
+			# return routes found in x seconds
+			Cond.MaxSearchTimeInSeconds: (900,),
+
+			Cond.ReturnFromCurrentStation: True,
+
+			}
+		FoundRoutes=TEST_FindAndDisplayRoutes(requirement_clusters[i],RequirementScores,EarliestArrival,RouteConditions)
 		print "Requirements for Cluster"+str(i)
 		PrintDictionaryContent(requirement_clusters[i])
 		print 
