@@ -102,12 +102,12 @@ RouteConditions1_30_300 = {
 
 # **************************************************************************************
 
-def TEST_ReadTimeTable():
+# def TEST_ReadTimeTable():
 
-	(TimeTableList, TimeTableIndex, StationHourIndex) = ReadTimeTable(dbcur, RouteConditions1)
-	print "TimeTableList:"
-	for line in TimeTableList:
-		print line
+# 	(TimeTableList, TimeTableIndex, StationHourIndex) = ReadTimeTable(dbcur, RouteConditions1)
+# 	print "TimeTableList:"
+# 	for line in TimeTableList:
+# 		print line
 
 def TEST_FindAndDisplayRoutes(Requirements,RequirementScores,EarliestArrival,RouteConditions):
 	"""
@@ -374,13 +374,15 @@ if __name__ == '__main__':
 	}
 	
 	st = time.time()
-	print "Reading Excel Files"
+	print "Reading Excel Files and Initializing Global Variables"
 
 	clusters=pd.read_excel('clusters.xlsx',header=None,names=["line","cluster_number"])
 
 	RequirementScores=pd.read_excel("reqscores.xlsx",index_col='conn_id')
 
 	EarliestArrival=pd.read_excel("earliest_arrival_allstations.xlsx",index_col='StationFrom')
+
+	StationListForLines=pd.read_excel("StationListForLines.xlsx",index_col=0,header=None)
 
 	print "Finished Reading Excel Files in %s seconds" %(time.time() - st)
 	
@@ -393,7 +395,8 @@ if __name__ == '__main__':
 		0: { },
 		1: { },
 		2 :{ },
-		3 : { }
+		3 : { },
+		4 : { }
 	}
 
 	for index, row in clusters.iterrows():
@@ -406,16 +409,14 @@ if __name__ == '__main__':
 
 	#TEST_FindAndDisplayRoutes(LMRequirementsAll,RequirementScores,EarliestArrival)
 	
-	StartingStationsList=[8501120,8503000,8507000,8505213]
-	
-	for i in range(4):
+	for i in range(5):
 		print LineSeparator
 		print "CLUSTER"+str(i)
 		
 		#Finding Appropriate Starting Station(might need to find the optimal starting station for each cluster)
 		
-		StartingStation=StartingStationsList[i]
-
+		StartingStation=BestStartingStation(requirement_clusters[i],StationListForLines,EarliestArrival)
+		print "Starting station for Cluster %d is %d" %(i,StartingStation)
 		RouteConditions = {
 			# von und bis Haltestelle (mandatory condition)
 			Cond.StartAndEndStations: (StartingStation, StartingStation), 	
@@ -444,9 +445,11 @@ if __name__ == '__main__':
 			Cond.ReportDuringRouteSearch: (10,), 
 
 			# return routes found in x seconds
-			Cond.MaxSearchTimeInSeconds: (900,),
+			Cond.MaxSearchTimeInSeconds: (1800,),
 
 			Cond.ReturnFromCurrentStation: True,
+
+			Cond.VisitAStationOnlyOnce: True,
 
 			}
 		FoundRoutes=TEST_FindAndDisplayRoutes(requirement_clusters[i],RequirementScores,EarliestArrival,RouteConditions)

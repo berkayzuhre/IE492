@@ -19,7 +19,7 @@ import os
 #######################################################################################
 
 
-os.chdir("C:\Users\Muhammed Karakurt\Desktop\IE 492 Final Project\Codes\IE492")
+os.chdir("C:\Users\Muhammed Karakurt\Desktop\IE 492 Final Project\Codes\IE492-HEURISTICS")
 
 f = open('pass.txt', 'r')
 pass_=f.readline()

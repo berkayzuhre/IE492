@@ -22,10 +22,11 @@ from sklearn.cluster import KMeans
 from matplotlib import pyplot as plt
 from openpyxl import Workbook
 import openpyxl
+import csv
+import pandas as pd
 
 import calendar
 import itertools as it
-import pandas as pd
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
@@ -465,8 +466,7 @@ class Cond:
 		# VisitAStationOnlyOnce
 		if RouteConditions.has_key(cls.VisitAStationOnlyOnce):
 			cond = cls.VisitAStationOnlyOnce
-			parameters = RouteConditions[cond]
-			IfVisitAStationOnlyOnce = parameters[0]
+			IfVisitAStationOnlyOnce = RouteConditions[cond]
 			if IfVisitAStationOnlyOnce and not CheckIfEachStationIsVisitedOnlyOnce(ConnectionInfo, PathInfo, EndStation, RouteConditions):
 				IncrementDicValue(cls.TerminationReasonsDic, 'VisitAStationOnlyOnce')
 				if IfTest: print "--------- VisitAStationOnlyOnce violated ---------"
@@ -1092,8 +1092,25 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 				StationList.add(connection[ConnInfoInd['station_to']])
 
 		StationListForLines[line] = StationList
+	
+	# workbook = openpyxl.Workbook()
+	# sheet = workbook.active
 
-	print "sadas"
+	# # openpyxl does things based on 1 instead of 0
+	# row = 1
+	# for key,values in StationListForLines.items():
+	# 	# Put the key in the first column for each key in the dictionary
+	# 	sheet.cell(row=row, column=1, value=key)
+	# 	column = 2
+	# 	for element in values:
+	# 		# Put the element in each adjacent column for each element in the tuple
+	# 		sheet.cell(row=row, column=column, value=element)
+	# 		column += 1
+	# 	row += 1
+
+	# workbook.save(filename="StationListForLines.xlsx")
+
+	#print "sadas"
 	#Initializing RequirementsScoresWithinCluster data frame within cluster
 	RequirementsSet=set(list(list(zip(*Requirements)[0])))
 	RequirementsSet=list(RequirementsSet)
@@ -1260,7 +1277,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# plt.ylabel('WCSS')
 	# plt.show()
 	
-	# ChosenNumberOfClusters=4
+	# ChosenNumberOfClusters=5
 
 	# kmeans=KMeans(n_clusters=ChosenNumberOfClusters, init='k-means++', max_iter=300, n_init=10, random_state=0)
 	# kmeans.fit(np.transpose(RequirementScores))
@@ -4022,6 +4039,26 @@ def CheckIfLastLineCanBeMeasured(PathInfo,IncludedLines,RequiredMeasureTime):
 	else:
 		return False
 
+def BestStartingStation(RequirementCluster,StationListForLines,EarliestArrival):
+	
+	RequirementsSet=set(list(list(zip(*RequirementCluster)[0])))
+	RequirementsSet=list(RequirementsSet)
+
+	AllRelevantStations=set()
+	for line in RequirementsSet:
+		AllRelevantStations.update(StationListForLines.loc[line,:].dropna())
+	
+	AllRelevantStations=list(AllRelevantStations)
+	#print AllRelevantStations
+	
+	TotalDistance=np.zeros(len(AllRelevantStations))
+	for station in AllRelevantStations:
+		ind=AllRelevantStations.index(station)
+		TotalDistance[ind]=EarliestArrival.loc[station,AllRelevantStations].sum(axis=0)
+	
+	min_index=np.argmin(TotalDistance)
+	
+	return int(AllRelevantStations[min_index])
 
 def CheckIfReturnIsPossibleFromCurrentStation(ConnectionInfo,PathInfo,RouteConditions,EarliestArrival_StationScoring):
 	
