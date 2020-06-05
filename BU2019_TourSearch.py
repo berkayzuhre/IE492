@@ -30,6 +30,7 @@ import itertools as it
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
+from GlobalVariables import*
 
 # **************************************************************************************
 # Read some global parameters from database tables
@@ -989,7 +990,8 @@ LMRequirementsAll = {
 		('8.RE1',3,11):   2,
 }
 
-def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,EarliestArrival):
+
+def FindAllRoutes(dbcur, RouteConditions,Requirements,EarliestArrival,ClusterIndex):
 	"""
 	Find all possible routes (w.r.t. time table) from start to end station 
     according to all conditions given in RouteConditions. 
@@ -1111,10 +1113,6 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# workbook.save(filename="StationListForLines.xlsx")
 
 	#print "sadas"
-	#Initializing RequirementsScoresWithinCluster data frame within cluster
-	RequirementsSet=set(list(list(zip(*Requirements)[0])))
-	RequirementsSet=list(RequirementsSet)
-	RequirementScoresWithinCluster=RequirementScores.loc[:,RequirementsSet]
 
 	#Creating EarliestArrival_StationScoring data frame to be used as a criteria for turning back
 	EarliestArrival_StationScoring=pd.DataFrame(np.full((1, len(DistinctStations)), 0),columns=list(DistinctStations))
@@ -1264,11 +1262,14 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	
 	
 	# EarliestArrival_StationScoring.to_excel("earliest_arrival.xlsx")
-	
+	# RequirementScores_numpy=RequirementScores.to_numpy(copy=True)
+	# RequirementScores_numpy[np.isnan(RequirementScores_numpy)] = 0
 	# wcss = []
 	# for i in range(1, 20):
 	# 	kmeans = KMeans(n_clusters=i, init='k-means++', max_iter=300, n_init=10, random_state=0)
-	# 	kmeans.fit(np.transpose(RequirementScores))
+	# 	#print np.any(np.isnan(RequirementScores_numpy))
+	# 	#print np.all(np.isfinite(RequirementScores_numpy))
+	# 	kmeans.fit(np.transpose(RequirementScores_numpy))
 	# 	wcss.append(kmeans.inertia_)
 
 	# plt.plot(range(1, 20), wcss)
@@ -1277,10 +1278,10 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# plt.ylabel('WCSS')
 	# plt.show()
 	
-	# ChosenNumberOfClusters=5
+	# ChosenNumberOfClusters=4
 
 	# kmeans=KMeans(n_clusters=ChosenNumberOfClusters, init='k-means++', max_iter=300, n_init=10, random_state=0)
-	# kmeans.fit(np.transpose(RequirementScores))
+	# kmeans.fit(np.transpose(RequirementScores_numpy))
 	# workbook = openpyxl.Workbook()
 	# sheet = workbook.active
 	
@@ -1294,10 +1295,12 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	# a=[StationListForLines[key] for key in list(list(zip(*LMRequirementsAll)[0]))]
 	# a=set().union(*a)
 	# ConnectionScoring(a,1)
+	RequirementsSet=set(list(list(zip(*Requirements)[0])))
+	RequirementsSet=list(RequirementsSet)
 
 	# find all possible paths
 	FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-		TimeTableList, TimeTableIndex,StationHourIndex,RequirementScoresWithinCluster,RequirementsSet,EarliestArrival_StationScoring)
+		TimeTableList, TimeTableIndex,StationHourIndex,RequirementsSet,EarliestArrival_StationScoring,ClusterIndex)
 	
 	PathInfoList = Cond.SelectedRoutes
 
@@ -1308,7 +1311,7 @@ def FindAllRoutes(dbcur, RouteConditions,Requirements,RequirementScores,Earliest
 	(StatusReport, TerminationReasons) = Cond.ResetClassVariables() 
 	return (RouteInfoList, StatusReport, TerminationReasons)
 
-def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex,RequirementScoresWithinCluster,RequirementsList,EarliestArrival_StationScoring,PathInfo=[]):
+def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList, TimeTableIndex, StationHourIndex,RequirementsList,EarliestArrival_StationScoring,ClusterIndex,PathInfo=[]):
 	""" 
 	Find all possible routes (w.r.t. time table) from start to end station w.r.t.
 	all conditions given by the dictionary RouteConditions.
@@ -1323,39 +1326,30 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		print "Route Information:"
 		print PrettyStringRouteInfo(PathInfo)
 
-    # check successful termination
+	# check successful termination and measurement
     # if len(PathInfo) > 1 and ConnectionInfo[ConnInfoInd['station_to']] == EndStation:  
+	
 	if CheckIfPathTerminatesSuccessfully(ConnectionInfo, PathInfo, RouteConditions, EndStation):
+		#start_time = timeit.default_timer()
 		if Cond.IfTestRouteSearch:
 			print "End Station is reached!"	
-		return [PathInfo]
-	
-	RequiredLines=set(RequirementsList)
-	#start_time = timeit.default_timer()
-	
-	#Measurement Check
-	if CheckIfLastLineCanBeMeasured(PathInfo,RequiredLines,10):
+		
 		(_, LMCoveragePerLineKey) = \
 			GetLMCoverageOfRoute(PathInfo, 10, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
 		
 		if len(LMCoveragePerLineKey)!=0:
 
-			#start_time1 = timeit.default_timer()
 			measured_lines=set(list(list(zip(*LMCoveragePerLineKey)[0])))
-			#elapsed1 = timeit.default_timer() - start_time1
-			#print 'finding measured lines %f' %(elapsed1)
-
 			measured_lines=list(measured_lines)
 
-			#start_time1 = timeit.default_timer()
 			for lines in measured_lines:
-				if lines in list(RequirementScoresWithinCluster.columns.values):
-					RequirementScoresWithinCluster.loc[:,lines]=None
-			#elapsed1 = timeit.default_timer() - start_time1
-			#print 'filling columns in reqscores %f' %(elapsed1)
+				if lines in list(RequirementScoresWithinCluster_dict[ClusterIndex].columns.values):
+					RequirementScoresWithinCluster_dict[ClusterIndex].loc[:,lines]=None
+					#print "Line %s  is measured" %(lines)
+		#elapsed = timeit.default_timer() - start_time
+		#print 'whole measurement check takes %f seconds' %(elapsed)
+		return [PathInfo]
 	
-	#elapsed = timeit.default_timer() - start_time
-	#print 'whole measurement check %f' %(elapsed)
     # current (this iteration's) path length
 	CurPathLen = len(PathInfo)
 
@@ -1412,7 +1406,7 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 
 		if res[-1] == True:
 			connection_id=ConnectionInfo[ConnInfoInd['conn_id']]
-			res[-1]= RequirementScoresWithinCluster[RequirementScoresWithinCluster!=None].min(1)[connection_id]
+			res[-1]= RequirementScoresWithinCluster_dict[ClusterIndex][RequirementScoresWithinCluster_dict[ClusterIndex]!=None].min(1)[connection_id]
 		
 		else:
 
@@ -1431,7 +1425,7 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 		
 		# recursive call
 		extended_paths = FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, \
-			TimeTableList, TimeTableIndex, StationHourIndex,RequirementScoresWithinCluster,RequirementsList, EarliestArrival_StationScoring,PathInfo)
+			TimeTableList, TimeTableIndex, StationHourIndex,RequirementsList, EarliestArrival_StationScoring,ClusterIndex,PathInfo)
 
 		# report status
 		if Cond.ReportDuringRouteSearch in RouteConditions:

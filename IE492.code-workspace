@@ -4,7 +4,10 @@
 			"path": "."
 		},
 		{
-			"path": "..\\IE492-TUNÇ"
+			"path": "..\\IE492-LOCAL SCORES"
 		}
-	]
+	],
+	"settings": {
+		"python.pythonPath": "C:\\Python27\\python.exe"
+	}
 }
