@@ -163,8 +163,8 @@ if __name__ == '__main__':
 	global AllRoutes
 	AllRoutes=[]
 
-	TEST_FindAndDisplayRoutes(LMRequirementsAll,0,EarliestArrival,RouteConditions1_30_300)
-	
+	#TEST_FindAndDisplayRoutes(LMRequirementsAll,0,EarliestArrival,RouteConditions1_30_300)
+
 	for i in range(4):
 		print LineSeparator
 		print "CLUSTER"+str(i)
@@ -173,42 +173,79 @@ if __name__ == '__main__':
 		
 		StartingStation=BestStartingStation(requirement_clusters[i],StationListForLines,EarliestArrival)
 		print "Starting station for Cluster %d is %d" %(i,StartingStation)
+		if i==3:    #6.S10'lu cluster için haritanın sağ altındaki
+			RouteConditions = {
+				# von und bis Haltestelle (mandatory condition)
+				Cond.StartAndEndStations: (StartingStation, StartingStation), 	
+				
+				# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
+				# determines earliest and latest arrival to end station
+				Cond.StartTimeAndDuration: (8, 0, 30, 300),		
+				
+				# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
+				Cond.MaxWaitingTimeAtStation: (25,),			
+				
+				# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
+				Cond.TimeForLineChange: (2,),
 
-		RouteConditions = {
-			# von und bis Haltestelle (mandatory condition)
-			Cond.StartAndEndStations: (StartingStation, StartingStation), 	
-			
-			# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
-			# determines earliest and latest arrival to end station
-			Cond.StartTimeAndDuration: (8, 0, 30, 300),		
-			
-			# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
-			Cond.MaxWaitingTimeAtStation: (25,),			
-			
-			# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
-			Cond.TimeForLineChange: (2,),
+				# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
+				Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
 
-			# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
-			Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
+				# connection availability on given days
+				Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
 
-			# connection availability on given days
-			Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
+				# select/filter only earliest arrival routes 
+				#True: minimum number of line changes as primary selection criterion
+				# Cond.SearchRoutesForEarliestArrival: (False,),
 
-			# select/filter only earliest arrival routes 
-			#True: minimum number of line changes as primary selection criterion
-			# Cond.SearchRoutesForEarliestArrival: (False,),
+				# Parameter: Reporting frequency in seconds
+				Cond.ReportDuringRouteSearch: (10,), 
 
-			# Parameter: Reporting frequency in seconds
-			Cond.ReportDuringRouteSearch: (10,), 
+				# return routes found in x seconds
+				Cond.MaxSearchTimeInSeconds: (1800,),
 
-			# return routes found in x seconds
-			Cond.MaxSearchTimeInSeconds: (1800,),
+				Cond.ReturnFromCurrentStation: False,
 
-			Cond.ReturnFromCurrentStation: True,
+				Cond.VisitAStationOnlyOnce: False,
 
-			Cond.VisitAStationOnlyOnce: True,
+				}
+		else:
+			RouteConditions = {
+				# von und bis Haltestelle (mandatory condition)
+				Cond.StartAndEndStations: (StartingStation, StartingStation), 	
+				
+				# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
+				# determines earliest and latest arrival to end station
+				Cond.StartTimeAndDuration: (8, 0, 30, 300),		
+				
+				# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
+				Cond.MaxWaitingTimeAtStation: (25,),			
+				
+				# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
+				Cond.TimeForLineChange: (2,),
 
-			}
+				# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
+				Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
+
+				# connection availability on given days
+				Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
+
+				# select/filter only earliest arrival routes 
+				#True: minimum number of line changes as primary selection criterion
+				# Cond.SearchRoutesForEarliestArrival: (False,),
+
+				# Parameter: Reporting frequency in seconds
+				Cond.ReportDuringRouteSearch: (10,), 
+
+				# return routes found in x seconds
+				Cond.MaxSearchTimeInSeconds: (1800,),
+
+				Cond.ReturnFromCurrentStation: False,
+
+				Cond.VisitAStationOnlyOnce: True,
+
+				}
+
 		FoundRoutes=TEST_FindAndDisplayRoutes(requirement_clusters[i],i,EarliestArrival,RouteConditions)
 		print "Requirements for Cluster"+str(i)
 		PrintDictionaryContent(requirement_clusters[i])
@@ -332,11 +369,6 @@ if __name__ == '__main__':
 	CoverageFileWriter= csv.writer(CoverageFile,delimiter=',',dialect='excel',lineterminator = '\n')
 	CoverageFileWriter.writerow(Coverage_Percentage)
 	CoverageFile.close()
-
-	CoverageForClusterFile = open("CoverageForClusters.csv",'a')
-	CoverageForClusterFileWriter= csv.writer(CoverageForClusterFile,delimiter=',', dialect='excel',lineterminator = '\n')
-	CoverageForClusterFileWriter.writerows(CoverageForCluster)
-	CoverageForClusterFile.close()
 
 	CoverPerRouteResultFile = open("CoverPerRoute.csv",'wb')
 	CoverPerRouteResultFileWriter= csv.writer(CoverPerRouteResultFile,delimiter=',', dialect='excel')

@@ -8,7 +8,7 @@ print "Reading Excel Files and Initializing Global Variables"
 
 clusters=pd.read_excel('clusters_with_coordinates.xlsx',header=None,names=["line","cluster_number"])
 
-RequirementScores=pd.read_excel("reqscores_with_earliestarrival.xlsx",index_col='conn_id')
+RequirementScores=pd.read_excel("reqscores_with_coordinates.xlsx",index_col='conn_id')
 
 EarliestArrival=pd.read_excel("earliest_arrival_allstations.xlsx",index_col='StationFrom')
 
@@ -255,25 +255,3 @@ for i in range(4):
 	RequirementScoresWithinCluster_dict[i]=RequirementScoresWithinCluster
 print "Finished seperating Requirement Scores into clusters"
 
-#Filling out the Requirements Score dataframe 
-for requirement in RequirementsSet:
-    start_time2 = timeit.default_timer()
-    Stations=StationListForLines[requirement]
-    Stations=list(Stations)
-
-    #Setting the earliest arrival to "0" for requirement line's stations
-    #EarliestArrival.loc[:,Stations]=0
-
-    #Setting the connection score to "0" for requirement line's connections
-    for connection_row in TimeTableList:
-        if connection_row[ConnInfoInd['line_id']] == requirement:
-            RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=0
-        else:
-            RequirementScores.at[connection_row[ConnInfoInd['conn_id']],requirement]=EarliestArrival.loc[connection_row[ConnInfoInd['station_to']],Stations].mean()+connection_row[ConnInfoInd['arrival_totalmin']]-connection_row[ConnInfoInd['departure_totalmin']]
-    elapsed2 = timeit.default_timer() - start_time2
-    print 'line %s reqscore takes %f ' %(requirement,elapsed2)
-
-elapsed1 = timeit.default_timer() - start_time1
-print 'initial reqscore takes %f ' %(elapsed1)
-
-RequirementScores.to_excel("reqscores.xlsx")
