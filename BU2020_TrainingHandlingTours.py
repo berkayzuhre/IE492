@@ -11,6 +11,7 @@ Training script for handling routes:
 - Route Segments 
 - Measurement Variants (Measurement Specifications)
 """
+from __future__ import division
 import psycopg2
 import sys, os
 import time
@@ -21,6 +22,13 @@ from datetime import datetime
 from datetime import timedelta
 import calendar
 import itertools as it
+
+import csv
+from matplotlib import pyplot as plt
+import gurobipy as gp
+from gurobipy import GRB
+import pandas as pd
+import numpy as np
 
 from BU2019_CentralParameters import *
 from BU2019_BasicFunctionsLib import *
@@ -123,23 +131,13 @@ RouteConditions2 = {
 
 # **************************************************************************************
 
-def TEST_ReadTimeTable():
-
-	(TimeTableList, TimeTableIndex, StationHourIndex) = ReadTimeTable(dbcur, RouteConditions1)
-	print "TimeTableList:"
-	for line in TimeTableList:
-		print line
-
-def TEST_FindAndDisplayRoutes():
+def TEST_FindAndDisplayRoutes(RouteConditions):
 	"""
 	if Read_RouteInfoList_FromFile = True AND a saved variable exists --> read tours from saved variable
 	Otherwise, search tours and save results (i.e. list of tours, RouteInfoList1)
 	"""
 	global RouteInfoList1
 	print "\nFind all routes for the given route conditions..."
-
-	# search conditions to be used
-	RouteConditions = RouteConditions1
 
 	if Read_RouteInfoList_FromFile:
 		RouteInfoList1 = ReadVariableFromFile(PlanYear, PlanMonth, 'RouteInfoList1', directory=VariableDirectory)
@@ -155,6 +153,12 @@ def TEST_FindAndDisplayRoutes():
 		print "StatusReport: " + str(StatusReport)
 		print "TerminationReasons: " + str(TerminationReasons)
 		print "length of RouteInfoList1: %s" % len(RouteInfoList1)
+
+		Report=["TerminationReasons:",str(TerminationReasons)]
+		FinalReport = open("CoverageForClusters.csv",'a')
+		FinalReportWriter= csv.writer(FinalReport,delimiter=',',dialect='excel',lineterminator = '\n')
+		FinalReportWriter.writerow(Report)
+		FinalReport.close()
 
 		# save variable to file
 		#SaveVariableToFile(RouteInfoList1, PlanYear, PlanMonth, 'RouteInfoList1', directory=VariableDirectory)
@@ -178,7 +182,7 @@ def TEST_FindAndDisplayRoutes():
 
 	# 	print "\nRouteInfo:"
 	# 	print PrettyStringRouteInfo(RouteInfo)
-
+	return RouteInfoList1
 # test module
 if __name__ == '__main__':
 	# **************************************************************************************
@@ -187,14 +191,390 @@ if __name__ == '__main__':
 	print LineSeparator
 	print "Simple Travel Planning to find some routes to work with"
 	print LineSeparator
+	
+	global AllRoutes
+	AllRoutes=[]
 
-	TEST_FindAndDisplayRoutes() 
+	print "Starting to create requirement Clusters"
+	requirement_clusters={ 
+		0: { },
+		1: { },
+		2 :{ },
+		3 :{ },
+		4: { },
+		5: { },
+		6: { },
+		7: { },
+		8: { },
+		9: { },
+	}
+	
+	LMRequirementsAll = {
+		('6.S10',2,11):   2,
+		('4.S6b',2,11):   2,
+		('7.S5a',2,11):   2,
+		('7.S5b',2,11):   2,
+		('4.S6a',2,11):   2,
+		('8.S6',2,11):   2,
+		('3.S6',2,11):   2,
+		('3.RE2a',2,11):   2,
+		('3.RE2b',2,11):   2,
+		('3.S5',2,11):   2,
+		('7.S14a',2,11):   2,
+		('7.S14b',2,11):   2,
+		('4.RE1',2,11):   2,
+		('2.RE3',2,11):   2,
+		('4.R5',2,11):   2,
+		('4.R6',2,11):   2,
+		('4.R7',2,11):   2,
+		('2.S40',2,11):   2,
+		('7.S3b',2,11):   2,
+		('7.S3a',2,11):   2,
+		('3.R1',2,11):   2,
+		('3.RE4',2,11):   2,
+		('3.R2',2,11):   2,
+		('3.S2a',2,11):   2,
+		('3.R7',2,11):   2,
+		('3.R6',2,11):   2,
+		('7.S25',2,11):   2,
+		('3.S44c',2,11):   2,
+		('7.S2a',2,11):   2,
+		('7.S2b',2,11):   2,
+		('1.R3',2,11):   2,
+		('1.R4',2,11):   2,
+		('3.S4b',2,11):   2,
+		('5.RE1',2,11):   2,
+		('5.S28',2,11):   2,
+		('7.S16b',2,11):   2,
+		('7.S16a',2,11):   2,
+		('5.S9',2,11):   2,
+		('3.S51',2,11):   2,
+		('3.S52',2,11):   2,
+		('6.S30',2,11):   2,
+		('2.RE4a',2,11):   2,
+		('2.RE4b',2,11):   2,
+		('6.S3',2,11):   2,
+		('6.S2',2,11):   2,
+		('6.S9',2,11):   2,
+		('2.S1',2,11):   2,
+		('7.S8c',2,11):   2,
+		('7.S8b',2,11):   2,
+		('7.S8a',2,11):   2,
+		('6.S20',2,11):   2,
+		('2.S30',2,11):   2,
+		('6.S25',2,11):   2,
+		('6.S26',2,11):   2,
+		('6.S27',2,11):   2,
+		('6.S29',2,11):   2,
+		('1.S2b',2,11):   2,
+		('1.S2a',2,11):   2,
+		('6.S23a',2,11):   2,
+		('6.S23b',2,11):   2,
+		('6.S41',2,11):   2,
+		('2.R8',2,11):   2,
+		('3.S3b',2,11):   2,
+		('3.S3a',2,11):   2,
+		('3.S4a',2,11):   2,
+		('5.S1',2,11):   2,
+		('2.R11',2,11):   2,
+		('3.RE1a',2,11):   2,
+		('5.S8',2,11):   2,
+		('5.S3a',2,11):   2,
+		('5.S3b',2,11):   2,
+		('5.S3c',2,11):   2,
+		('6.RE2',2,11):   2,
+		('7.S7b',2,11):   2,
+		('7.S7a',2,11):   2,
+		('3.S2b',2,11):   2,
+		('2.S9',2,11):   2,
+		('3.R4b',2,11):   2,
+		('3.R4a',2,11):   2,
+		('7.S15b',2,11):   2,
+		('7.S15a',2,11):   2,
+		('2.S4b',2,11):   2,
+		('2.S4a',2,11):   2,
+		('7.S24b',2,11):   2,
+		('7.S24c',2,11):   2,
+		('7.S24a',2,11):   2,
+		('2.R12',2,11):   2,
+		('7.S6a',2,11):   2,
+		('3.S44a',2,11):   2,
+		('3.S44b',2,11):   2,
+		('7.S6b',2,11):   2,
+		('3.S1a',2,11):   2,
+		('3.S1b',2,11):   2,
+		('3.RE1b',2,11):   2,
+		('2.R10',2,11):   2,
+		('7.S9a',2,11):   2,
+		('7.S9b',2,11):   2,
+		('2.R13',2,11):   2,
+		('2.R14',2,11):   2,
+		('7.S12b',2,11):   2,
+		('7.S12a',2,11):   2,
+		('1.S3a',2,11):   2,
+		('1.S3b',2,11):   2,
+		('8.RE1',2,11):   2,
+		('6.S10',3,11):   2,
+		('4.S6b',3,11):   2,
+		('7.S5a',3,11):   2,
+		('7.S5b',3,11):   2,
+		('4.S6a',3,11):   2,
+		('8.S6',3,11):   2,
+		('3.S6',3,11):   2,
+		('3.RE2a',3,11):   2,
+		('3.RE2b',3,11):   2,
+		('3.S5',3,11):   2,
+		('7.S14a',3,11):   2,
+		('7.S14b',3,11):   2,
+		('4.RE1',3,11):   2,
+		('2.RE3',3,11):   2,
+		('4.R5',3,11):   2,
+		('4.R6',3,11):   2,
+		('4.R7',3,11):   2,
+		('2.S40',3,11):   2,
+		('7.S3b',3,11):   2,
+		('7.S3a',3,11):   2,
+		('3.R1',3,11):   2,
+		('3.RE4',3,11):   2,
+		('3.R2',3,11):   2,
+		('3.S2a',3,11):   2,
+		('3.R7',3,11):   2,
+		('3.R6',3,11):   2,
+		('7.S25',3,11):   2,
+		('3.S44c',3,11):   2,
+		('7.S2a',3,11):   2,
+		('7.S2b',3,11):   2,
+		('1.R3',3,11):   2,
+		('1.R4',3,11):   2,
+		('3.S4b',3,11):   2,
+		('5.RE1',3,11):   2,
+		('5.S28',3,11):   2,
+		('7.S16b',3,11):   2,
+		('7.S16a',3,11):   2,
+		('5.S9',3,11):   2,
+		('3.S51',3,11):   2,
+		('3.S52',3,11):   2,
+		('6.S30',3,11):   2,
+		('2.RE4a',3,11):   2,
+		('2.RE4b',3,11):   2,
+		('6.S3',3,11):   2,
+		('6.S2',3,11):   2,
+		('6.S9',3,11):   2,
+		('2.S1',3,11):   2,
+		('7.S8c',3,11):   2,
+		('7.S8b',3,11):   2,
+		('7.S8a',3,11):   2,
+		('6.S20',3,11):   2,
+		('2.S30',3,11):   2,
+		('6.S25',3,11):   2,
+		('6.S26',3,11):   2,
+		('6.S27',3,11):   2,
+		('6.S29',3,11):   2,
+		('1.S2b',3,11):   2,
+		('1.S2a',3,11):   2,
+		('6.S23a',3,11):   2,
+		('6.S23b',3,11):   2,
+		('6.S41',3,11):   2,
+		('2.R8',3,11):   2,
+		('3.S3b',3,11):   2,
+		('3.S3a',3,11):   2,
+		('3.S4a',3,11):   2,
+		('5.S1',3,11):   2,
+		('2.R11',3,11):   2,
+		('3.RE1a',3,11):   2,
+		('5.S8',3,11):   2,
+		('5.S3a',3,11):   2,
+		('5.S3b',3,11):   2,
+		('5.S3c',3,11):   2,
+		('6.RE2',3,11):   2,
+		('7.S7b',3,11):   2,
+		('7.S7a',3,11):   2,
+		('3.S2b',3,11):   2,
+		('2.S9',3,11):   2,
+		('3.R4b',3,11):   2,
+		('3.R4a',3,11):   2,
+		('7.S15b',3,11):   2,
+		('7.S15a',3,11):   2,
+		('2.S4b',3,11):   2,
+		('2.S4a',3,11):   2,
+		('7.S24b',3,11):   2,
+		('7.S24c',3,11):   2,
+		('7.S24a',3,11):   2,
+		('2.R12',3,11):   2,
+		('7.S6a',3,11):   2,
+		('3.S44a',3,11):   2,
+		('3.S44b',3,11):   2,
+		('7.S6b',3,11):   2,
+		('3.S1a',3,11):   2,
+		('3.S1b',3,11):   2,
+		('3.RE1b',3,11):   2,
+		('2.R10',3,11):   2,
+		('7.S9a',3,11):   2,
+		('7.S9b',3,11):   2,
+		('2.R13',3,11):   2,
+		('2.R14',3,11):   2,
+		('7.S12b',3,11):   2,
+		('7.S12a',3,11):   2,
+		('1.S3a',3,11):   2,
+		('1.S3b',3,11):   2,
+		('8.RE1',3,11):   2,
+	}
+	
+	clusters=pd.read_excel('clusters_with_mean_coordinates.xlsx',header=None,names=["line","cluster_number"])
+
+	for index, row in clusters.iterrows():
+		for key,value in LMRequirementsAll.items():
+			if key[0]==row['line']:
+				cluster_number=row['cluster_number']
+				requirement_clusters[int(cluster_number)][key]=value
+
+	StartingStationList=[8507000,8503000,8501120,8505214,8507296,8517131,8500109,8505004,8508295,8502213]
+	
+	for i in range(10):
+		print LineSeparator
+		print "CLUSTER"+str(i)
+		
+		#Finding Appropriate Starting Station
+		
+		StartingStation=StartingStationList[i]
+		print "Starting station for Cluster %d is %d" %(i,StartingStation)
+		RequirementsSet=set(list(list(zip(*requirement_clusters[i])[0])))
+		RequirementsSet=list(RequirementsSet)
+
+		TotalSearchTimInSeconds=60*60*2
+		SearchTime=len(RequirementsSet)*(TotalSearchTimInSeconds)/104
+		
+		SearchTimeForCSV=["SearchTimeForCluster in seconds:",SearchTime]
+		StartingStationForCSV=["StartingStationForCluster:",StartingStation]
+
+		SmallClusterIndexList=[3,5,6,7,8,9]
+		if i in SmallClusterIndexList:    #6.S10'lu cluster(haritanın sağ altındaki) ve kendi yaptığım küçük clusterlar için
+			RouteConditions = {
+				# von und bis Haltestelle (mandatory condition)
+				Cond.StartAndEndStations: (StartingStation, StartingStation), 	
+				
+				# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
+				# determines earliest and latest arrival to end station
+				Cond.StartTimeAndDuration: (8, 0, 30, 300),		
+				
+				# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
+				Cond.MaxWaitingTimeAtStation: (25,),			
+				
+				# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
+				Cond.TimeForLineChange: (2,),
+
+				# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
+				Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
+
+				# connection availability on given days
+				Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
+
+				# select/filter only earliest arrival routes 
+				#True: minimum number of line changes as primary selection criterion
+				# Cond.SearchRoutesForEarliestArrival: (False,),
+
+				# Parameter: Reporting frequency in seconds
+				Cond.ReportDuringRouteSearch: (10,), 
+
+				# return routes found in x seconds
+				Cond.MaxSearchTimeInSeconds: (SearchTime,),
+
+				Cond.VisitAStationOnlyOnce: False,
+
+				}
+		else:
+			RouteConditions = {
+				# von und bis Haltestelle (mandatory condition)
+				Cond.StartAndEndStations: (StartingStation, StartingStation), 	
+				
+				# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
+				# determines earliest and latest arrival to end station
+				Cond.StartTimeAndDuration: (8, 0, 30, 300),		
+				
+				# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
+				Cond.MaxWaitingTimeAtStation: (25,),			
+				
+				# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
+				Cond.TimeForLineChange: (2,),
+
+				# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
+				Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
+
+				# connection availability on given days
+				Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
+
+				# select/filter only earliest arrival routes 
+				#True: minimum number of line changes as primary selection criterion
+				# Cond.SearchRoutesForEarliestArrival: (False,),
+
+				# Parameter: Reporting frequency in seconds
+				Cond.ReportDuringRouteSearch: (10,), 
+
+				# return routes found in x seconds
+				Cond.MaxSearchTimeInSeconds: (SearchTime,),
+
+				Cond.VisitAStationOnlyOnce: True,
+
+				}
+		FoundRoutes=TEST_FindAndDisplayRoutes(RouteConditions)
+		print "Requirements for Cluster"+str(i)
+		PrintDictionaryContent(requirement_clusters[i])
+		RequirementForCluster=[]
+		Cluster_ReqCov=["Cluster"+str(i),"Requirements"]
+		RequirementForCluster.append(Cluster_ReqCov)
+		for key,value in requirement_clusters[i].items():
+			# Put the key in the first column for each key in the dictionary
+			csv_row=[]
+			csv_row.append(str(key))
+			csv_row.append(value)
+			RequirementForCluster.append(csv_row)
+		
+		if i==0:
+			RequirementForClusterFile = open("CoverageForClusters.csv",'wb')
+			RequirementForClusterFileWriter= csv.writer(RequirementForClusterFile,delimiter=',', dialect='excel',lineterminator = '\n')
+			RequirementForClusterFileWriter.writerow(StartingStationForCSV)
+			RequirementForClusterFileWriter.writerow(SearchTimeForCSV)
+			RequirementForClusterFileWriter.writerows(RequirementForCluster)
+			RequirementForClusterFile.close()
+		else:
+			RequirementForClusterFile = open("CoverageForClusters.csv",'a')
+			RequirementForClusterFileWriter= csv.writer(RequirementForClusterFile,delimiter=',', dialect='excel',lineterminator = '\n')
+			RequirementForClusterFileWriter.writerow(StartingStationForCSV)
+			RequirementForClusterFileWriter.writerow(SearchTimeForCSV)
+			RequirementForClusterFileWriter.writerows(RequirementForCluster)
+			RequirementForClusterFile.close()
+
+		print 
+		print "Coverage for Cluster"+str(i)
+		LMCoverageTotal = {}
+		for RouteInfo in FoundRoutes:
+			(LMCoveragePerSegment, LMCoveragePerLineKey) = \
+				GetLMCoverageOfRoute(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
+			
+			LMCoverageTotal = AddDicValues(LMCoverageTotal, LMCoveragePerLineKey)
+		PrintDictionaryContent(LMCoverageTotal)
+		CoverageForCluster=[]
+		Cluster_ReqCov=["Cluster"+str(i),"Coverage"]
+		CoverageForCluster.append(Cluster_ReqCov)
+		for key,value in LMCoverageTotal.items():
+			# Put the key in the first column for each key in the dictionary
+			csv_row=[]
+			csv_row.append(str(key))
+			csv_row.append(value)
+			CoverageForCluster.append(csv_row)
+		
+		CoverageForClusterFile = open("CoverageForClusters.csv",'a')
+		CoverageForClusterFileWriter= csv.writer(CoverageForClusterFile,delimiter=',', dialect='excel',lineterminator = '\n')
+		CoverageForClusterFileWriter.writerows(CoverageForCluster)
+		CoverageForClusterFile.close()
+
+		AllRoutes.extend(FoundRoutes)
 
 	print LineSeparator
 	print "Evaluate tours"
 	print LineSeparator
 
-	print "RouteConditions1 is a list that contains %s routes." % len(RouteInfoList1)
+	print "All Routes is a list that contains %s routes." % len(AllRoutes)
 
 	# **************************************************************************************
 	# Line Measurement (LM) Coverage of Routes
@@ -416,47 +796,34 @@ if __name__ == '__main__':
 		('1.S3b',3,11):   2,
 		('8.RE1',3,11):   2,
 	}
-
-	# select a route in RouteInfoList1
-	# Route1 =  RouteInfoList1[-2]
 	
-	# print "\nRouteInfo:"
-	# print PrettyStringRouteInfo(Route1)
-
-	# Line Measurement Coverage of Route1 tells us, which LineKeys of LMRequirements
-	# can be measured by the Measurement Variants of Route1.
-	# (LMCoverageOfRoutePerSegment, LMCoverageOfRoutePerLineKey) = \
-	# 	GetLMCoverageOfRoute(Route1, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
-
-	# PeriodBegin (first day of month), PeriodEnd (last day of month), 
-	# ReqLineMeasureTime (required time in minutes for measuring a line)
-	# are global parameters defined in BU2019_CentralParameters.py
-
-	# display LM Coverage of Route per Segment & LineKey
-
-	# print "\nLMCoverageOfRoutePerSegment:"
-	# PrintDictionaryContent(LMCoverageOfRoutePerSegment)
-
-	# Line Measurement (LM) Coverage of a Route: What a route can measure
-	# (with all its varians) in terms of LineKeys (Line, TimeWindow, WeekdayGroup)
-
-	# print "\nLine Measurement (LM) Coverage of Route1 per LineKey"
-	# PrintDictionaryContent(LMCoverageOfRoutePerLineKey)
-
-	# the LM Coverage of many routes can be added up
-	# with the function AddDicValues() to obtain
-	# the total LM coverage of many routes.
-
-	# for example, let's see, which LineKeys of LMRequirements
-	# can be covered by all routes of RouteInfoList1:
 	LMCoverageTotal = {}
-	for RouteInfo in RouteInfoList1:
+	RouteCosts = {}
+	RouteInd=1
+	Routes = {}
+
+	for RouteInfo in AllRoutes:
+		RouteName='Route' + str(RouteInd)
+		
+		if RouteName not in Routes : 
+			Routes[RouteName]={}
+		
 		(LMCoveragePerSegment, LMCoveragePerLineKey) = \
 			GetLMCoverageOfRoute(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
 		
-		LMCoverageTotal = AddDicValues(LMCoverageTotal, LMCoveragePerLineKey)
+		if len(LMCoveragePerLineKey)>0:
+			RouteInd = RouteInd+1
+			for key,value in LMCoveragePerLineKey.items():
+				# Put the key in the first column for each key in the dictionary
+				Routes[RouteName][str(key)]=value
+			departure_first_station = RouteInfo[0][ConnInfoInd['departure_hour']]*60 + RouteInfo[0][ConnInfoInd['departure_min']]
+			arrival_last_station = RouteInfo[-1][ConnInfoInd['arrival_hour']]*60 + RouteInfo[-1][ConnInfoInd['arrival_min']]
+			routeDur=arrival_last_station-departure_first_station
+			RouteCosts[RouteName]=routeDur
 
-	print "\nLM Coverage of all routes in RouteInfoList1 (#LineKeys: %s)" % len(LMCoverageTotal)
+		LMCoverageTotal = AddDicValues(LMCoverageTotal, LMCoveragePerLineKey)
+	
+	print "\nLM Coverage of all routes in AllRoutes (#LineKeys: %s)" % len(LMCoverageTotal)
 	PrintDictionaryContent(LMCoverageTotal)
 
 	totalReq=0
@@ -465,9 +832,8 @@ if __name__ == '__main__':
 	for var in LMRequirementsAll:
 		totalReq += LMRequirementsAll.get(var,"")
 
-
 	for var in LMRequirementsAll:
-		a=LMCoverageTotal.get(var,"")
+
 		if LMCoverageTotal.get(var,"") == '':
 			continue
 
@@ -477,186 +843,60 @@ if __name__ == '__main__':
 		else:
 			totalCov += LMCoverageTotal.get(var,"")
 
-
 	print "Coverage Percentage : %s" % (float(totalCov) / float(totalReq) * 100)
 
-	# # **************************************************************************************
-	# # Travel Segments
-	# # **************************************************************************************
+	Coverage_Percentage = ["Coverage Percentage =",(float(totalCov) / float(totalReq) * 100)]
 
-	# print LineSeparator 
-	# print "Travel Segments of a Route"
-	# print LineSeparator
+	CoverageFile = open("CoverageForClusters.csv",'a')
+	CoverageFileWriter= csv.writer(CoverageFile,delimiter=',',dialect='excel',lineterminator = '\n')
+	CoverageFileWriter.writerow(Coverage_Percentage)
+	NumberOfRoutes=["Total Number of Tours:",len(AllRoutes)]
+	CoverageFileWriter.writerow(NumberOfRoutes)
+	CoverageFile.close()
 
-	# # Travel segments are defined by real change points:
-	# # A travel segment is a continuous trip without a line change.
+	CoverReqforLPstr = {}
+	for key,value in LMCoverageTotal.items():
+		# Put the key in the first column for each key in the dictionary
+		CoverReqforLPstr[str(key)] = LMRequirementsAll[key]
 
-	# # get travel segments (Reisen) of Route1
-	# TravelSegments1 = GetTravelSegments(Route1, TimeWindows)
+	#LP Model & Gurobi Start
 
-	# print "\nTravelSegments1 (raw print dictionary)"
-	# PrintDictionaryContent(TravelSegments1)
+	model = gp.Model("mipl")
 
-	# # TravelSegments1 is a dictionary whose values are lists with multiple field values.
-	# # The meaning and order of these fields are defined in global variable SegmentInfoInd
-	# # in BU2019_CentralParameters.py
+	CoverReqforLP = dict((k,int(v)) for k,v in CoverReqforLPstr.iteritems())
 
-	# # For example, this is how you can get the LineID of segment 1:
-	# print "\nGet LineID of segment 1:"
-	# LineID_seg1 = TravelSegments1[1][SegmentInfoInd['line_id']]
-	# print "LineID_seg1 = %s" % LineID_seg1
+	route_line_param ={}
 
-	# # Keys of the dictionary TravelSegments1 are simply ordered segment numbers (1, 2, ... N)
+	for route_name in Routes:
 
-	# # With the following function, travel segments can be displayed nicely 
-	# # together with the route information:
+		for lines in CoverReqforLP.keys():
 
-	# print "\nDisplay TravelSegments1 nicely together with route information"
-	# print PrettyStringRouteSegmentsInfo(TravelSegments1)
+			if lines in Routes[route_name]:
+				route_line_param[route_name,lines]=1
+			else:
+				route_line_param[route_name,lines]=0
 
-	# # **************************************************************************************
-	# # Route Segments
-	# # **************************************************************************************
+	#Create Decision Variables
+	selected_routes = model.addVars(Routes.keys(), lb=0,vtype=GRB.INTEGER,name="open")
+	model.update()
 
-	# print LineSeparator 
-	# print "Route Segments of a Route"
-	# print LineSeparator
+	#Objective Function (belki quicksum daha iyi gurobide)
+	model.setObjective(sum(CoverReqforLP[j]*150 for j in CoverReqforLP) - sum(1*RouteCosts[i]*selected_routes[i] for i in RouteCosts), GRB.MAXIMIZE)
 
-	# # Unlike travel segments, route segments can have virtual change points 
-	# # for LineID and time window changes within the same continuous trip. 
-	# # Route segments are the basis for measurement variants of a route.
-	# RouteSegment1 =  GetRouteSegments(Route1, TimeWindows)
+	#Add Constraints
+	for lines in CoverReqforLP:
+		model.addConstr(sum(selected_routes[route]*route_line_param[route,lines] for route in Routes.keys())>=CoverReqforLP[lines])
 
-	# print "\nRouteSegment1 (raw)"
-	# PrintDictionaryContent(RouteSegment1)
+	model.update()
+	model.optimize()
 
-	# # Route segments too can be displayed nicely together with the route information:
+	# for v in model.getVars():
+	# 	print('%s %g' % (v.varName, v.x))
 
-	# print "\nDisplay RouteSegment1 nicely together with route information"
-	# print PrettyStringExtendedRouteSegmentsInfo(RouteSegment1)
+	Profit=["Profit:",model.objVal]
+	ProfitFile = open("CoverageForClusters.csv",'a')
+	ProfitFileWriter= csv.writer(ProfitFile,delimiter=',',dialect='excel',lineterminator = '\n')
+	ProfitFileWriter.writerow(Profit)
+	ProfitFile.close()
 
-	# print Route1
-
-	# # Unless there are TimeWindow of LineID changes within continuous travels (Reisen, travel segments)
-	# # of a route, route segments are expected to be same as travel segments. 
-
-	# # Subsequent connections with the same FahrtID (trip_id) constitute a continuous 
-	# # travel segment (Reise)
-
-	# # Let's manipulate Route1 manually to display the difference of travel and route segments
-	# # by adding LineID and TimeWindow changes to the route:
-
-	# Route1_manipulated = [
-	# (8500000, 8507000, None, None, None, None, None, 'W', None, 8, 0, None, 8, 0, None, None, None), 
-	# (8507000, 8504489, 792580, '3.S5', 60995, 15528, 33, 'S', '5', 8, 8, 488, 8, 12, 492, '', 1), 
-	# (8504489, 8516154, 792581, '3.S5', 60995, 15528, 33, 'S', '5', 8, 12, 492, 8, 14, 494, '', 2), 
-
-	# # extend the duration of the trip to cause a TimeWindow change
-	# # within the same travel segment (notice same FahrtID 61373 of following connections)
-	# (8516154, 8504489, 795307, '3.S52', 61373, 16227, 33, 'S', '52', 8, 18, 498, 12, 0, 720, '', 5), 
-	# (8504489, 8507000, 795308, '3.S52', 61373, 16227, 33, 'S', '52', 12, 5, 725, 14, 26, 906, '', 6), 
-	# (8507000, 8503000, 48462, None, 4581, 709, 11, 'IC', '1', 14, 30, 910, 14, 45, 935, '', 2)]
-
-	# # Now compare the travel and tour segments of the manipulated tour Route1_manipulated
-	# print "\nDisplay manipulated route Route1_manipulated"
-	# print PrettyStringRouteInfo(Route1_manipulated)
-
-	# TravelSegments1_man = GetTravelSegments(Route1_manipulated, TimeWindows)
-	# print "\nDisplay TravelSegments of Route1_manipulated nicely together with route information"
-	# print PrettyStringRouteSegmentsInfo(TravelSegments1_man)
-
-	# RouteSegment1_man =  GetRouteSegments(Route1_manipulated, TimeWindows)
-	# print "\nDisplay RouteSegments of Route1_manipulated nicely together with route information"
-	# print PrettyStringExtendedRouteSegmentsInfo(RouteSegment1_man)
-
-	# # Note that in the Route1_manipulated, we have additional route segments due to 
-	# # LineID and TimeWindow changes within the same travel segment.
-
-	# **************************************************************************************
-	# Valuation and Sorting of Routes
-	# **************************************************************************************
-
-	# Route Value depends primarily on:
-	# 1) what a route can measure (with all its measurement variants), 
-	# 		and what is the monetary revenue from these line & station measurements
-	# 2) what is the duration cost of a route
-
-	print LineSeparator 
-	print "Valuation and Sorting of Routes"
-	print LineSeparator
-
-	# There can be multiple valuation functions for routes. One of them is PlanEinsatz.GetSimpleLMRouteValue()
-
-	N = 10
-	print "\nGet the value of first %s routes in RouteInfoList1 (Valuation Func = GetSimpleLMRouteValue)" % N 
-
-	RouteCounter = 0
-	for RouteInfo in RouteInfoList1:
-		RouteCounter += 1 
-		
-		RouteValue = GetSimpleLMRouteValue(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirementsAll, 
-			RevenueLineMeasure, TripCostPerTimeInterval)
-		print "Value of Route-%s: %s" % (RouteCounter, RouteValue)
-		
-		if RouteCounter == N:
-			break
-
-	# Sort Tours:
-	# sort all the routes in RouteInfoList1 after their values, in descending order
-
-	# select valuation function for sorting
-	RouteValueFunc = GetSimpleLMRouteValue
-
-	# Parameters is a tuple containing all input variables required for the valuation function
-	ValueFuncParameters = (ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirementsAll, 
-		RevenueLineMeasure, TripCostPerTimeInterval)
-
-	# Note that you can pass any valuation function to the following sorting function.
-	SortedRouteInfoList = SortRoutesAfterValueInDescOrder(RouteInfoList1, RouteValueFunc, ValueFuncParameters)
-
-	N = 10
-	print "\nGet the value of first %s routes in SortedRouteInfoList (Valuation Func = GetRouteValue)" % N 
-
-	RouteCounter = 0
-	for RouteInfo in SortedRouteInfoList:
-		RouteCounter += 1 
-		
-		# alternative valuation function
-		# RouteValue = GetRouteValue(RouteInfo, TimeWindows, ReqLineMeasureTime, StationMeasureTime_AQ, StationMeasureTime_KI, {}, 
-		#	MinTimeIntvForStationMeasurements, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll, RailCountPerStation=None, LineToReqBundle=None)
-		
-		RouteValue = RouteValueFunc(RouteInfo, *ValueFuncParameters)
-
-		print "\nValue of Route-%s: %s" % (RouteCounter, RouteValue)
-
-		print PrettyStringRouteInfo(RouteInfo)
-		
-		if RouteCounter == N:
-			break
-
-	# **************************************************************************************
-	# Availability of Routes
-	# **************************************************************************************
-
-	# print LineSeparator 
-	# print "Availability of Routes (on week days)"
-	# print LineSeparator
-
-	# # get availability of Route1
-
-	# # StartDate: First day of month as date object 
-	# # EndDate: last day of month as date object
-	# # StartDate & EndDate are global variables defined in PlanInputParameters.py
-	# (AvailableDaysRoute, UnavailableDaysRoute) = GetAvailabilityOfRoute(Route1, StartDate, EndDate)
-
-	# # AvailableDaysRoute and UnavailableDaysRoute are lists of ordinal dates (day numbers)
-
-	# print "\nRoute1 is available on days (%s):" % len(AvailableDaysRoute)
-	# for DayOrd in AvailableDaysRoute:
-	# 	print "Date: %s - Weekday: %s" % (ConvertDateOrdinalToDateString(DayOrd), GetWeekdayOfDate(DayOrd))
-
-	# print "\nRoute1 is NOT available on days (%s):" % len(UnavailableDaysRoute)
-	# for DayOrd in UnavailableDaysRoute:
-	# 	print "Date: %s - Weekday: %s" % (ConvertDateOrdinalToDateString(DayOrd), GetWeekdayOfDate(DayOrd))
-
-	
+	print('Obj: %g' % model.objVal)

@@ -452,8 +452,7 @@ class Cond:
 		# VisitAStationOnlyOnce
 		if RouteConditions.has_key(cls.VisitAStationOnlyOnce):
 			cond = cls.VisitAStationOnlyOnce
-			parameters = RouteConditions[cond]
-			IfVisitAStationOnlyOnce = parameters[0]
+			IfVisitAStationOnlyOnce = RouteConditions[cond]
 			if IfVisitAStationOnlyOnce and not CheckIfEachStationIsVisitedOnlyOnce(ConnectionInfo, PathInfo, EndStation, RouteConditions):
 				IncrementDicValue(cls.TerminationReasonsDic, 'VisitAStationOnlyOnce')
 				if IfTest: print "--------- VisitAStationOnlyOnce violated ---------"
