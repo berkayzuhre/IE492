@@ -752,8 +752,12 @@ def ReadTimeTable(dbcur, RouteConditions):
 	ind = 0
 	CurStation = None
 	CurHour = None
+	
+	timetable = open("timetable.csv",'wb')
+	Writer= csv.writer(timetable,delimiter=',', dialect='excel',lineterminator = '\n')
 
 	for row in rows:
+		Writer.writerow(row)
 		# element order defined in ConnInfoInd
 		l = range(0, len(ConnInfoInd))
 
@@ -776,6 +780,8 @@ def ReadTimeTable(dbcur, RouteConditions):
 		CurStation = station_from
 		CurHour = departure_hour
 		ind += 1 
+	
+	timetable.close()
 	return (TimeTableList, TimeTableIndex, StationHourIndex)
 
 
@@ -1324,16 +1330,24 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 
 			measured_lines=set(list(list(zip(*LMCoveragePerLineKey)[0])))
 			measured_lines=list(measured_lines)
-
+			
 			for lines in measured_lines:
 				if lines in list(RequirementScoresWithinCluster_dict[ClusterIndex].columns.values):
 					RequirementScoresWithinCluster_dict[ClusterIndex].loc[:,lines]=None
 					#print "Line %s  is measured" %(lines)
 		#elapsed = timeit.default_timer() - start_time
 		#print 'whole measurement check takes %f seconds' %(elapsed)
+		for Connection in PathInfo:
+			ExampleTourStations.append(Connection[ConnInfoInd['station_to']])
+			CoveredStations.add(Connection[ConnInfoInd['station_to']])
+		tour = open("exampletour.csv",'wb')
+		Writer= csv.writer(tour,delimiter=',', dialect='excel')
+		Writer.writerow(ExampleTourStations)
+		tour.close()
+
 		return [PathInfo]
-	
-    # current (this iteration's) path length
+
+	# current (this iteration's) path length
 	CurPathLen = len(PathInfo)
 
     # get next connections
@@ -1366,10 +1380,11 @@ def FindAllRoutesRec(ConnectionInfo, EndStation, RouteConditions, TimeTableList,
 	res=[]
 	
 	for ConnectionInfo in ConnectionInfoList:
+		#CoveredStations.add(Connection[ConnInfoInd['station_to']])
 		res.append(Cond.CheckIfConnectionShouldBeSelected(ConnectionInfo, PathInfo, EndStation, RouteConditions,EarliestArrival_StationScoring))
 		
 		if res[-1] == None: return[]
-
+		
 		if res[-1] == True:
 			connection_id=ConnectionInfo[ConnInfoInd['conn_id']]
 			res[-1]= RequirementScoresWithinCluster_dict[ClusterIndex][RequirementScoresWithinCluster_dict[ClusterIndex]!=None].min(1)[connection_id]
@@ -2229,7 +2244,7 @@ def GetMeasurableTimeIntervalsPerStationKey(PathInfo, MinMeasureTime, ZF, WD, St
 							TimeIntervalPerStation[statkey].append((ArrivalTimeMin, DepartureTimeMin))
 						else:
 							TimeIntervalPerStation[statkey] = [(ArrivalTimeMin, DepartureTimeMin)]
-	return TimeIntervalPerStatio
+	return TimeIntervalPerStation
 
 def GetMeasurableTimeIntervalsPerLineAndTW(RouteInfo, MinMeasureTime, ZF):
 	"""
@@ -4030,23 +4045,6 @@ def CheckIfReturnIsPossibleFromCurrentStation(ConnectionInfo,PathInfo,RouteCondi
 		return True
 	else:
 		return False
-
-def GetTimeAndDurationOfPath(PathInfo):
-	"""
-	Get begin/end times, and total duration of path since arrival to first station (Depot).
-	"""
-	if not PathInfo:
-		return None 
-	if len(PathInfo) < 2: return None 
-
-	arrival_first_station = PathInfo[0][ConnInfoInd['arrival_hour']]*60 + PathInfo[0][ConnInfoInd['arrival_min']]
-	# departure_first_station = PathInfo[1][ConnInfoInd['departure_hour']]*60 + PathInfo[1][ConnInfoInd['departure_min']]
-
-	arrival_last_station = PathInfo[-1][ConnInfoInd['arrival_hour']]*60 + PathInfo[-1][ConnInfoInd['arrival_min']]
-	TotalDuration = arrival_last_station - arrival_first_station
-	return (TotalDuration, arrival_first_station, arrival_last_station)
-
-
 
 def CheckIfPathTerminatesSuccessfully(ConnectionInfo, PathInfo, RouteConditions, EndStation):
 

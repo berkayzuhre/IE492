@@ -6,7 +6,7 @@ LineSeparator = 100 * '*'
 st = time.time()
 print "Reading Excel Files and Initializing Global Variables"
 
-clusters=pd.read_excel('clusters_with_coordinates.xlsx',header=None,names=["line","cluster_number"])
+clusters=pd.read_excel('clusters_with_mean_coordinates.xlsx',header=None,names=["line","cluster_number"])
 
 RequirementScores=pd.read_excel("reqscores_with_coordinates.xlsx",index_col='conn_id')
 
@@ -22,7 +22,13 @@ requirement_clusters={
     0: { },
     1: { },
     2 :{ },
-    3 : { },
+    3 :{ },
+    4: { },
+    5: { },
+    6: { },
+    7: { },
+    8: { },
+    9: { },
 }
 
 LMRequirementsAll = {
@@ -247,7 +253,7 @@ print LineSeparator
 print "Requirement Scores are being seperated into clusters"
 
 RequirementScoresWithinCluster_dict={}
-for i in range(4):
+for i in range(10):
 	RequirementsSet=set(list(list(zip(*requirement_clusters[i])[0])))
 	RequirementsSet=list(RequirementsSet)
 	
@@ -255,3 +261,5 @@ for i in range(4):
 	RequirementScoresWithinCluster_dict[i]=RequirementScoresWithinCluster
 print "Finished seperating Requirement Scores into clusters"
 
+CoveredStations=set()
+ExampleTourStations=[]
