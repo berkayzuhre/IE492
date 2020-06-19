@@ -18,8 +18,7 @@ import os
 # Static Parameter Definitions
 #######################################################################################
 
-
-os.chdir("C:\Users\Muhammed Karakurt\Desktop\IE 492 Final Project\Codes\IE492-HEURISTICS")
+os.chdir("C:\Users\Muhammed Karakurt\Desktop\IE 492 Final Project\Codes\IE492-LOCAL SCORES")
 
 f = open('pass.txt', 'r')
 pass_=f.readline()

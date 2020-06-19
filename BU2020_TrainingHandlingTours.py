@@ -12,6 +12,7 @@ Training script for handling routes:
 - Route Segments 
 - Measurement Variants (Measurement Specifications)
 """
+from __future__ import division
 import psycopg2
 import sys, os
 import time
@@ -124,7 +125,12 @@ def TEST_FindAndDisplayRoutes(Requirements,RequirementScores,EarliestArrival,Rou
 		print "StatusReport: " + str(StatusReport)
 		print "TerminationReasons: " + str(TerminationReasons)
 		print "length of RouteInfoList1: %s" % len(RouteInfoList1)
-
+		
+		Report=["TerminationReasons:",str(TerminationReasons)]
+		FinalReport = open("CoverageForClusters.csv",'a')
+		FinalReportWriter= csv.writer(FinalReport,delimiter=',',dialect='excel',lineterminator = '\n')
+		FinalReportWriter.writerow(Report)
+		FinalReport.close()
 		# save variable to file
 		#SaveVariableToFile(RouteInfoList1, PlanYear, PlanMonth, 'RouteInfoList1', directory=VariableDirectory)
 
@@ -376,9 +382,9 @@ if __name__ == '__main__':
 	st = time.time()
 	print "Reading Excel Files and Initializing Global Variables"
 
-	clusters=pd.read_excel('clusters.xlsx',header=None,names=["line","cluster_number"])
+	clusters=pd.read_excel('clusters_with_mean_coordinates.xlsx',header=None,names=["line","cluster_number"])
 
-	RequirementScores=pd.read_excel("reqscores.xlsx",index_col='conn_id')
+	RequirementScores=pd.read_excel("reqscores_with_coordinates.xlsx",index_col='conn_id')
 
 	EarliestArrival=pd.read_excel("earliest_arrival_allstations.xlsx",index_col='StationFrom')
 
@@ -395,8 +401,7 @@ if __name__ == '__main__':
 		0: { },
 		1: { },
 		2 :{ },
-		3 : { },
-		4 : { }
+		3 : { }
 	}
 
 	for index, row in clusters.iterrows():
@@ -405,11 +410,11 @@ if __name__ == '__main__':
 				cluster_number=row['cluster_number']
 				requirement_clusters[int(cluster_number)][key]=value
 
-	print "Finished creating requirement Clusters in %s" %(time.time() - st)
+	print "Finished creating requirement Clusters in %s seconds" %(time.time() - st)
 
 	#TEST_FindAndDisplayRoutes(LMRequirementsAll,RequirementScores,EarliestArrival)
 	
-	for i in range(5):
+	for i in range(4):
 		print LineSeparator
 		print "CLUSTER"+str(i)
 		
@@ -417,44 +422,115 @@ if __name__ == '__main__':
 		
 		StartingStation=BestStartingStation(requirement_clusters[i],StationListForLines,EarliestArrival)
 		print "Starting station for Cluster %d is %d" %(i,StartingStation)
-		RouteConditions = {
-			# von und bis Haltestelle (mandatory condition)
-			Cond.StartAndEndStations: (StartingStation, StartingStation), 	
-			
-			# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
-			# determines earliest and latest arrival to end station
-			Cond.StartTimeAndDuration: (8, 0, 30, 300),		
-			
-			# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
-			Cond.MaxWaitingTimeAtStation: (25,),			
-			
-			# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
-			Cond.TimeForLineChange: (2,),
+		RequirementsSet=set(list(list(zip(*requirement_clusters[i])[0])))
+		RequirementsSet=list(RequirementsSet)
+		
+		MaxSearchTimeInSeconds=60*60*2
+		SearchTime=len(RequirementsSet)*(MaxSearchTimeInSeconds)/len(RequirementScores.columns.values)
+		SearchTimeForCSV=["SearchTimeForCluster in seconds:",SearchTime]
+		StartingStationForCSV=["StartingStationForCluster:",StartingStation]
+		
+		if i==3:    #6.S10'lu cluster için haritanın sağ altındaki
+			RouteConditions = {
+				# von und bis Haltestelle (mandatory condition)
+				Cond.StartAndEndStations: (StartingStation, StartingStation), 	
+				
+				# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
+				# determines earliest and latest arrival to end station
+				Cond.StartTimeAndDuration: (8, 0, 30, 300),		
+				
+				# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
+				Cond.MaxWaitingTimeAtStation: (25,),			
+				
+				# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
+				Cond.TimeForLineChange: (2,),
 
-			# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
-			Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
+				# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
+				Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
 
-			# connection availability on given days
-			Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
+				# connection availability on given days
+				Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
 
-			# select/filter only earliest arrival routes 
-			#True: minimum number of line changes as primary selection criterion
-			# Cond.SearchRoutesForEarliestArrival: (False,),
+				# select/filter only earliest arrival routes 
+				#True: minimum number of line changes as primary selection criterion
+				# Cond.SearchRoutesForEarliestArrival: (False,),
 
-			# Parameter: Reporting frequency in seconds
-			Cond.ReportDuringRouteSearch: (10,), 
+				# Parameter: Reporting frequency in seconds
+				Cond.ReportDuringRouteSearch: (10,), 
 
-			# return routes found in x seconds
-			Cond.MaxSearchTimeInSeconds: (1800,),
+				# return routes found in x seconds
+				Cond.MaxSearchTimeInSeconds: (SearchTime,),
 
-			Cond.ReturnFromCurrentStation: True,
+				Cond.ReturnFromCurrentStation: True,
 
-			Cond.VisitAStationOnlyOnce: True,
+				Cond.VisitAStationOnlyOnce: False,
 
-			}
+				}
+		else:
+			RouteConditions = {
+				# von und bis Haltestelle (mandatory condition)
+				Cond.StartAndEndStations: (StartingStation, StartingStation), 	
+				
+				# StartTime in Hour und Minute, MinDuration, MaxDuration in minutes (mandatory condition)
+				# determines earliest and latest arrival to end station
+				Cond.StartTimeAndDuration: (8, 0, 30, 300),		
+				
+				# Max Wartezeit bei einer Haltestelle in Minuten (mandatory condition)
+				Cond.MaxWaitingTimeAtStation: (25,),			
+				
+				# Min nötige Umsteige-Zeit in Minuten (mandatory condition)
+				Cond.TimeForLineChange: (2,),
+
+				# Cond.IncludeListedGattungsOnly: (RelevantLineCategories,), 	
+				Cond.IncludeListedManagementsOnly: (RelevantManagements,),			# [11,33,7000]
+
+				# connection availability on given days
+				Cond.ConnectionsAreAvailableOnAllListedDays: (GetWeekdaysOfMonth(PlanMonth, PlanYear, WD[11]),),
+
+				# select/filter only earliest arrival routes 
+				#True: minimum number of line changes as primary selection criterion
+				# Cond.SearchRoutesForEarliestArrival: (False,),
+
+				# Parameter: Reporting frequency in seconds
+				Cond.ReportDuringRouteSearch: (10,), 
+
+				# return routes found in x seconds
+				Cond.MaxSearchTimeInSeconds: (SearchTime,),
+
+				Cond.ReturnFromCurrentStation: True,
+
+				Cond.VisitAStationOnlyOnce: True,
+
+				}
 		FoundRoutes=TEST_FindAndDisplayRoutes(requirement_clusters[i],RequirementScores,EarliestArrival,RouteConditions)
 		print "Requirements for Cluster"+str(i)
 		PrintDictionaryContent(requirement_clusters[i])
+		
+		RequirementForCluster=[]
+		Cluster_ReqCov=["Cluster"+str(i),"Requirements"]
+		RequirementForCluster.append(Cluster_ReqCov)
+		for key,value in requirement_clusters[i].items():
+			# Put the key in the first column for each key in the dictionary
+			csv_row=[]
+			csv_row.append(str(key))
+			csv_row.append(value)
+			RequirementForCluster.append(csv_row)
+		
+		if i==0:
+			RequirementForClusterFile = open("CoverageForClusters.csv",'wb')
+			RequirementForClusterFileWriter= csv.writer(RequirementForClusterFile,delimiter=',', dialect='excel',lineterminator = '\n')
+			RequirementForClusterFileWriter.writerow(StartingStationForCSV)
+			RequirementForClusterFileWriter.writerow(SearchTimeForCSV)
+			RequirementForClusterFileWriter.writerows(RequirementForCluster)
+			RequirementForClusterFile.close()
+		else:
+			RequirementForClusterFile = open("CoverageForClusters.csv",'a')
+			RequirementForClusterFileWriter= csv.writer(RequirementForClusterFile,delimiter=',', dialect='excel',lineterminator = '\n')
+			RequirementForClusterFileWriter.writerow(StartingStationForCSV)
+			RequirementForClusterFileWriter.writerow(SearchTimeForCSV)
+			RequirementForClusterFileWriter.writerows(RequirementForCluster)
+			RequirementForClusterFile.close()
+
 		print 
 		print "Coverage for Cluster"+str(i)
 		LMCoverageTotal = {}
@@ -463,7 +539,24 @@ if __name__ == '__main__':
 				GetLMCoverageOfRoute(RouteInfo, ReqLineMeasureTime, PeriodBegin, PeriodEnd, LMRequirements=LMRequirementsAll)
 			
 			LMCoverageTotal = AddDicValues(LMCoverageTotal, LMCoveragePerLineKey)
+
 		PrintDictionaryContent(LMCoverageTotal)
+		
+		CoverageForCluster=[]
+		Cluster_ReqCov=["Cluster"+str(i),"Coverage"]
+		CoverageForCluster.append(Cluster_ReqCov)
+		for key,value in LMCoverageTotal.items():
+			# Put the key in the first column for each key in the dictionary
+			csv_row=[]
+			csv_row.append(str(key))
+			csv_row.append(value)
+			CoverageForCluster.append(csv_row)
+		
+		CoverageForClusterFile = open("CoverageForClusters.csv",'a')
+		CoverageForClusterFileWriter= csv.writer(CoverageForClusterFile,delimiter=',', dialect='excel',lineterminator = '\n')
+		CoverageForClusterFileWriter.writerows(CoverageForCluster)
+		CoverageForClusterFile.close()
+		
 		AllRoutes.extend(FoundRoutes)
 
 	#AllRoutes = list(OrderedDict.fromkeys(AllRoutes))
@@ -532,6 +625,15 @@ if __name__ == '__main__':
 			totalCov += LMCoverageTotal.get(var,"")
 
 	print "Coverage Percentage : %s" % (float(totalCov) / float(totalReq) * 100)
+
+	Coverage_Percentage = ["Coverage Percentage =",(float(totalCov) / float(totalReq) * 100)]
+
+	CoverageFile = open("CoverageForClusters.csv",'a')
+	CoverageFileWriter= csv.writer(CoverageFile,delimiter=',',dialect='excel',lineterminator = '\n')
+	CoverageFileWriter.writerow(Coverage_Percentage)
+	NumberOfRoutes=["Total Number of Tours:",len(AllRoutes)]
+	CoverageFileWriter.writerow(NumberOfRoutes)
+	CoverageFile.close()
 
 	CoverPerRouteResultFile = open("CoverPerRoute.csv",'wb')
 	CoverPerRouteResultFileWriter= csv.writer(CoverPerRouteResultFile,delimiter=',', dialect='excel')
@@ -632,7 +734,10 @@ if __name__ == '__main__':
 	model.update()
 	model.optimize()
 
-	# for v in model.getVars():
-	# 	print('%s %g' % (v.varName, v.x))
+	Profit=["Profit:",model.objVal]
+	ProfitFile = open("CoverageForClusters.csv",'a')
+	ProfitFileWriter= csv.writer(ProfitFile,delimiter=',',dialect='excel',lineterminator = '\n')
+	ProfitFileWriter.writerow(Profit)
+	ProfitFile.close()
 
 	print('Obj: %g' % model.objVal)
